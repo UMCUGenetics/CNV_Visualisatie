@@ -70,9 +70,9 @@ def get_read_data(all_reads):
     data = []
 
     for region in all_reads:
-        paired_reads, unmapped_mate, duplicate_pairs, high_isize = get_read_stats(region)
+        paired_reads, unmapped_mate, duplicate_pairs, high_isize, facaway, same_orientation, proper_pair = get_read_stats(region)
 
-        regiondata = [paired_reads, unmapped_mate, duplicate_pairs, high_isize]
+        regiondata = [paired_reads, unmapped_mate, duplicate_pairs, high_isize, facaway, same_orientation, proper_pair]
         data.append(regiondata)
 
     return data
@@ -88,31 +88,67 @@ def get_read_stats(region):
     already_done = {}
 
     paired_reads = 0
+    proper_pair = 0
     unmapped_mate = 0
     duplicate_pairs = 0
     high_isize = 0
+    facaway = 0
+    same_orientation = 0
 
     for read in region:
-        if read.is_paired and read not in already_done:
+        if read.is_paired and read.qname not in already_done:
             paired_reads += 1
+
+        if read.is_proper_pair and read.qname not in already_done:
+            proper_pair += 1
 
         if read.mate_is_unmapped:
             unmapped_mate += 1
 
-        if read.is_duplicate and read not in already_done:
+        if read.is_duplicate and read.qname not in already_done:
             duplicate_pairs += 1
 
         if isvalidread(read, already_done):
             if not -args.high_insert_size <= read.isize <= args.high_insert_size:
                 high_isize += 1
 
+        if isfacaway(read) and read.qname not in already_done:
+            facaway += 1
+
+        if issameorientation(read) and read.qname not in already_done:
+            same_orientation += 1
+
         already_done.update({read.qname: None})
 
-    return paired_reads, unmapped_mate, duplicate_pairs, high_isize
+    return paired_reads, unmapped_mate, duplicate_pairs, high_isize, facaway, same_orientation, proper_pair
+
+
+def isfacaway(read):
+    """ The isfacaway function returns True if the reads in a pair are faced away from each other and false if they are
+    not.
+
+    :param read: Pysam object containing data of a read.
+    :return bool: A bool telling if a read pair face away from each other.
+    """
+    if read.is_paired and not read.mate_is_unmapped:
+        if read.is_read1:
+            if read.is_reverse and not read.mate_is_reverse:
+                return True
+            else:
+                return False
+
+        else:
+            if not read.is_reverse and read.mate_is_reverse:
+                return True
+            else:
+                return False
+
+    else:
+        return False
 
 
 def isvalidread(read, already_done):
-    """ Function that returns True if read is a proper pair.
+    """ Function that returns True if read is valid to be used for the high insert size calculation.
 
     :param read: Pysam object containing data of a read.
     :param already_done: Dictionary containing read names.
@@ -123,6 +159,24 @@ def isvalidread(read, already_done):
         return True
     else:
         return False
+
+
+def issameorientation(read):
+    """ The issameorientation function returns a bool returning true if a pair of reads have the same orientation and
+    false if they have an oposite orientation.
+
+    :param read: Pysam object containing data of a read.
+    :return bool: A boolean returning True if the reads of a pair have the same orientation.
+    """
+    if read.is_paired and not read.mate_is_unmapped:
+        if read.is_reverse and read.mate_is_reverse:
+            return True
+
+        elif not read.is_reverse and not read.mate_is_reverse:
+            return True
+
+        else:
+            return False
 
 
 def write_bedfile(regions, read_data):
@@ -139,9 +193,13 @@ def write_bedfile(regions, read_data):
         unmapped_mate = read_data[index][1]
         duplicate_pairs = read_data[index][2]
         high_insize = read_data[index][3]
+        facaway = read_data[index][4]
+        same_orientation = read_data[index][5]
+        proper_pair = read_data[index][6]
 
-        text += f"{region}\tName=Read_information;Paired_reads={paired_reads};Unmapped_mate={unmapped_mate};" \
-                f"Duplicate_pair={duplicate_pairs};High_insert_size={high_insize}\n"
+        text += f"{region}\tName=Read_information;Paired_reads={paired_reads};Proper_pairs={proper_pair};Unmapped_mate=" \
+                f"{unmapped_mate};Duplicate_pair={duplicate_pairs};High_insert_size={high_insize};Facaway={facaway};" \
+                f"Same_orientation={same_orientation}\n"
 
     with open(args.output + '/output.bed', 'w') as igvfile:
         igvfile.write(text)
