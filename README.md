@@ -1,4 +1,4 @@
-# CNV_Visualisatie
+# CNV_Visualisation
 
 ## Description
 
@@ -15,14 +15,14 @@ required packages by typing:
 
 To check if the installation was successful navigate to the Scripts folder and type:
 
-`$ python3 main.py -h`
+`$ python3 CNV_vis.py -h`
 
 If installation went correctly a help menu should appear in your terminal.
 
 ## Usage
 The script can be called from the terminal using the following command:
 
-`$ python3 main.py --bamfile path/to/bamfile.bam --vcf_file path/to/vcffile.vcf`
+`$ python3 CNV_vis.py --bamfile path/to/bamfile.bam --vcf_file path/to/vcffile.vcf`
 
 
 #### required arguments:
@@ -34,7 +34,7 @@ The script can be called from the terminal using the following command:
 #### optional arguments
 
 - `--output` or `-o` followed by `path/to/output_folder`. Used to specify the folder where the output files should be stored.
-*Default: same folder as main.py*.
+*Default: same folder as CNV_vis.py*.
   
 
 - `--logfile` or `-l` followed by `True` or `False`. Used to specify if log file should be written in output folder. 

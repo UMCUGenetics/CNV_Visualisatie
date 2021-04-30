@@ -1,14 +1,13 @@
 import pysam
-from pysam import VariantFile
 from datetime import datetime, date
 import os
 import argparse
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--bamfile', '-bf', required=True, type=str, help='Path to bam file.')
-parser.add_argument('--vcf_file', '-vcf', required=True, type=str, help='Path to vcf file.')
+parser.add_argument('--bam', '-b', required=True, type=str, help='Path to bam file.')
+parser.add_argument('--vcf', '-v', required=True, type=str, help='Path to vcf file.')
 parser.add_argument('--output', '-o', required=False, type=str, help='Path to output folder.')
-parser.add_argument('--logfile', '-l', required=False, default=True, type=bool,
+parser.add_argument('--log', '-l', required=False, default=True, type=bool,
                     help='Bool specifying if logfile should be made.')
 parser.add_argument('--capture_region', '-cr', required=False, default=3000, type=int,
                     help='Number of basepairs that should be included around CNV call.')
@@ -23,14 +22,13 @@ def vcf_calls():
 
     :return regions: A list of coordinates specified in the vcf file.
     """
-    vcf_file = VariantFile(args.vcf_file)
+    vcf_file = pysam.VariantFile(args.vcf)
     regions = []
 
     for call in vcf_file:
-        splitcall = str(call).split('\t')
-        chr = splitcall[0]
-        start = str(int(splitcall[1]) - args.capture_region)
-        stop = str(int(splitcall[7].split(';')[2].split('=')[1]) + args.capture_region)
+        chr = call.chrom
+        start = str(call.start - args.capture_region)
+        stop = str(call.stop + args.capture_region)
         region = [chr, start, stop]
         regions.append(region)
 
@@ -44,19 +42,15 @@ def fetch_reads(regions):
     :param regions: A list containing the chromosome and coordinates for every region.
     :return all_reads: A list containing the number of reads in the specified region
     """
-    samfile = pysam.AlignmentFile(args.bamfile, 'rb')
+    bamfile = pysam.AlignmentFile(args.bam, 'rb')
     all_reads = []
 
     for loc in regions:
-        reads = samfile.fetch(str(loc[0]), int(loc[1]), int(loc[2]))
+        reads = bamfile.fetch(str(loc[0]), int(loc[1]), int(loc[2]))
 
-        regional_reads = []
-        for read in reads:
-            regional_reads.append(read)
+        all_reads.append(list(reads))
 
-        all_reads.append(regional_reads)
-
-    samfile.close()
+    bamfile.close()
 
     return all_reads
 
@@ -70,9 +64,7 @@ def get_read_data(all_reads):
     data = []
 
     for region in all_reads:
-        paired_reads, unmapped_mate, duplicate_pairs, high_isize, facaway, same_orientation, proper_pair = get_read_stats(region)
-
-        regiondata = [paired_reads, unmapped_mate, duplicate_pairs, high_isize, facaway, same_orientation, proper_pair]
+        regiondata = get_read_stats(region)
         data.append(regiondata)
 
     return data
@@ -96,31 +88,34 @@ def get_read_stats(region):
     same_orientation = 0
 
     for read in region:
-        if read.is_paired and read.qname not in already_done:
-            paired_reads += 1
+        if read.qname not in already_done:
+            if read.is_paired:
+                paired_reads += 1
 
-        if read.is_proper_pair and read.qname not in already_done:
-            proper_pair += 1
+            if read.is_proper_pair:
+                proper_pair += 1
 
-        if read.mate_is_unmapped:
-            unmapped_mate += 1
+            if read.mate_is_unmapped:
+                unmapped_mate += 1
 
-        if read.is_duplicate and read.qname not in already_done:
-            duplicate_pairs += 1
+            if read.is_duplicate:
+                duplicate_pairs += 1
 
-        if isvalidread(read, already_done):
-            if not -args.high_insert_size <= read.isize <= args.high_insert_size:
-                high_isize += 1
+            if isvalidread(read):
+                if not -args.high_insert_size <= read.isize <= args.high_insert_size:
+                    high_isize += 1
 
-        if isfacaway(read) and read.qname not in already_done:
-            facaway += 1
+            if isfacaway(read):
+                facaway += 1
 
-        if issameorientation(read) and read.qname not in already_done:
-            same_orientation += 1
+            if issameorientation(read):
+                same_orientation += 1
 
         already_done.update({read.qname: None})
 
-    return paired_reads, unmapped_mate, duplicate_pairs, high_isize, facaway, same_orientation, proper_pair
+    regiondata = [paired_reads, unmapped_mate, duplicate_pairs, high_isize, facaway, same_orientation, proper_pair]
+
+    return regiondata
 
 
 def isfacaway(read):
@@ -147,15 +142,13 @@ def isfacaway(read):
         return False
 
 
-def isvalidread(read, already_done):
+def isvalidread(read):
     """ Function that returns True if read is valid to be used for the high insert size calculation.
 
     :param read: Pysam object containing data of a read.
-    :param already_done: Dictionary containing read names.
     :return boool: A boolean returning true if read is valid.
     """
-    if (read.is_paired and not read.is_unmapped and not read.mate_is_unmapped and not read.is_duplicate and
-            read.qname not in already_done):
+    if read.is_paired and not read.is_unmapped and not read.mate_is_unmapped and not read.is_duplicate:
         return True
     else:
         return False
@@ -169,10 +162,7 @@ def issameorientation(read):
     :return bool: A boolean returning True if the reads of a pair have the same orientation.
     """
     if read.is_paired and not read.mate_is_unmapped:
-        if read.is_reverse and read.mate_is_reverse:
-            return True
-
-        elif not read.is_reverse and not read.mate_is_reverse:
+        if read.is_reverse == read.mate_is_reverse:
             return True
 
         else:
@@ -201,8 +191,8 @@ def write_bedfile(regions, read_data):
                 f"{unmapped_mate};Duplicate_pair={duplicate_pairs};High_insert_size={high_insize};Facaway={facaway};" \
                 f"Same_orientation={same_orientation}\n"
 
-    with open(args.output + '/output.bed', 'w') as igvfile:
-        igvfile.write(text)
+    with open(args.output + '/output.bed', 'w') as bedfile:
+        bedfile.write(text)
 
 
 def write_logfile():
@@ -213,7 +203,7 @@ def write_logfile():
     current_day = date.today().strftime("%d/%m/%Y")
 
     text = f'Logfile created by: {current_path}\nScript finished at: {current_time} {current_day}\n{"-"*80}\n' \
-           f'Parameters:\nBamfile: {args.bamfile}\nVCF file: {args.vcf_file}\nOutput_folder: {args.output}\n' \
+           f'Parameters:\nBamfile: {args.bam}\nVCF file: {args.vcf}\nOutput_folder: {args.output}\n' \
            f'Capture region: {args.capture_region}\nHigh insert size threshold: {args.high_insert_size}'
 
     with open(args.output + '/log.txt', 'w') as logfile:
@@ -231,5 +221,5 @@ if __name__ == '__main__':
 
     write_bedfile(regions, read_data)  # write the result in a BED file.
 
-    if args.logfile:
+    if args.log:
         write_logfile()  # write logfile with parameters
