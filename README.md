@@ -7,11 +7,8 @@ statistics about reads from a bam file around regions specified in a vcf file.
 This version of the script is still in early development and is ***not the final version***.
 
 ## Installation
-The repo can be cloned from github and the required packages can be installed by opening your terminal
- and navigating to the folder containing "requirements.txt". Use the following command in your terminal to install the
-required packages by typing:
+The repo can be cloned from github and the required packages with their requried version can be found in the "requirements.txt".
 
-`$ pip install -r requirements.txt`
 
 To check if the installation was successful navigate to the Scripts folder and type:
 

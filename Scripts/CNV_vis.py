@@ -77,7 +77,7 @@ def get_read_stats(region):
     :param region: a list containing the reads of a region.
     :return readcount: an integer representing the total number of reads in the region.
     """
-    already_done = {}
+    already_done = set()
 
     paired_reads = 0
     proper_pair = 0
@@ -111,7 +111,7 @@ def get_read_stats(region):
             if issameorientation(read):
                 same_orientation += 1
 
-        already_done.update({read.qname: None})
+        already_done.add(read.qname)
 
     regiondata = [paired_reads, unmapped_mate, duplicate_pairs, high_isize, facaway, same_orientation, proper_pair]
 
