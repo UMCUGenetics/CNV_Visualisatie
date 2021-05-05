@@ -45,9 +45,10 @@ def place_flags(reads):
     :return flags: A 2d list containing the coordinates of the flags and additional information.
     """
     flags = []
+    chromosome = args.region.split(':')[0].replace('chr', '')
 
     isbuildingflag = False
-    flag = ['3', None, None, 1]
+    flag = [chromosome, None, None, 1]
 
     for read in reads:
         if not read.is_unmapped:
