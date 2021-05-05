@@ -48,8 +48,8 @@ def place_flags(reads):
     chromosome = args.region.split(':')[0].replace('chr', '')
 
     isbuildingflag = False
-    flag = [chromosome, None, None, 1]
-
+    flag = [chromosome, None, None, ['type', 0, 0]]
+    
     for read in reads:
         if not read.is_unmapped:
             if issameorientation(read) and not isbuildingflag:
@@ -59,14 +59,17 @@ def place_flags(reads):
 
             elif issameorientation(read) and isbuildingflag:
                 flag[2] = read.positions[-1]
-                flag[3] += 1
+                flag[3][0] += 1
 
             elif not issameorientation(read) and isbuildingflag:
                 if read.positions[0] > flag[2]:
-                    if flag[3] > args.threshold:
+                    if flag[3][0] > args.threshold:
                         flags.append(flag)
-                    flag = ['3', None, None, 1]
+                    flag = [chromosome, None, None, [0, 0]]
                     isbuildingflag = False
+
+            if isbuildingflag:
+                flag[3][1] += 1
 
     return flags
 
@@ -92,11 +95,17 @@ def write_bedfile(flags):
     :param regions: a list of coordinates specified in the vcf file.
     :param read_data: a 2d list containing the read data of every region.
     """
-    text = 'track name=same_direction_reads description="Region_Summary." db=hg19 gffTags=on\n'
+    # TODO: add color scaling to rgb
+    text = 'track name=same_direction_reads description="Region_Summary." db=hg19 gffTags=on itemRGB="On"\n'
 
     for flag in flags:
+        percentage = round(flag[3][0] / flag[3][1], 2)
+
         region = f"{flag[0]}\t{flag[1]}\t{flag[2]}"
-        text += f"{region}\tName=Same_facing_reads;Readcount={flag[3]}\n"
+        description = f"Name=Same_facing_reads;Readcount={flag[3][0]};Total_reads={flag[3][1]};Percentage={percentage}"
+        rgb = f"150,200,150"
+
+        text += f"{region}\t{description}\t0\t.\t{flag[1]}\t{flag[2]}\t{rgb}\n"
 
     with open(args.output + '/output_flags.bed', 'w') as bedfile:
         bedfile.write(text)
