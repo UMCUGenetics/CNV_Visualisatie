@@ -44,34 +44,53 @@ def place_flags(reads):
     :param reads: Pysam object containing read information
     :return flags: A 2d list containing the coordinates of the flags and additional information.
     """
-    flags = []
+    all_flags = []
     chromosome = args.region.split(':')[0].replace('chr', '')
 
-    isbuildingflag = False
-    flag = [chromosome, None, None, ['type', 0, 0]]
-    
+    isbuildingflags = [False, False]
+    flags = [[chromosome, None, None, {'type': 'same_orientation', 'count': 0, 'total': 0}],
+             [chromosome, None, None, {'type': str, 'count': 0, 'total': 0}]]
+
     for read in reads:
         if not read.is_unmapped:
-            if issameorientation(read) and not isbuildingflag:
-                flag[1] = read.positions[0]
-                flag[2] = read.positions[-1]
-                isbuildingflag = True
+            if issameorientation(read):
+                flags, isbuildingflags = same_orientation_flag(read, flags, isbuildingflags)
 
-            elif issameorientation(read) and isbuildingflag:
-                flag[2] = read.positions[-1]
-                flag[3][0] += 1
+            elif not issameorientation(read) and isbuildingflags[0] and read.positions[0] > flags[0][2]:
+                if flags[0][3]['count'] > args.threshold:
+                    all_flags.append(flags[0])
+                flags[0] = [chromosome, None, None, {'type': 'same_orientation', 'count': 0, 'total': 0}]
+                isbuildingflags[0] = False
 
-            elif not issameorientation(read) and isbuildingflag:
-                if read.positions[0] > flag[2]:
-                    if flag[3][0] > args.threshold:
-                        flags.append(flag)
-                    flag = [chromosome, None, None, [0, 0]]
-                    isbuildingflag = False
+            flags = update_total(flags)
 
-            if isbuildingflag:
-                flag[3][1] += 1
+    return all_flags
+
+
+def update_total(flags):
+
+    for flag in flags:
+        total = flag[3]['total']
+        total += 1
+        flag[3].update({'total': total})
 
     return flags
+
+
+def same_orientation_flag(read, flags, isbuildingflags):
+    if not isbuildingflags[0]:
+        flags[0][1] = read.positions[0]
+        flags[0][2] = read.positions[-1]
+        isbuildingflags[0] = True
+
+    if isbuildingflags[0]:
+        flags[0][2] = read.positions[-1]
+
+    counter = flags[0][3]['count']
+    counter += 1
+    flags[0][3].update({'count': counter})
+
+    return flags, isbuildingflags
 
 
 def issameorientation(read):
@@ -99,11 +118,15 @@ def write_bedfile(flags):
     text = 'track name=same_direction_reads description="Region_Summary." db=hg19 gffTags=on itemRGB="On"\n'
 
     for flag in flags:
-        percentage = round(flag[3][0] / flag[3][1], 2)
+        percentage = round(flag[3]['count'] / flag[3]['total'], 2)
 
         region = f"{flag[0]}\t{flag[1]}\t{flag[2]}"
-        description = f"Name=Same_facing_reads;Readcount={flag[3][0]};Total_reads={flag[3][1]};Percentage={percentage}"
-        rgb = f"150,200,150"
+        description = f"Name={flag[3]['type']};Readcount={flag[3]['count']};Total_reads={flag[3]['total']};" \
+                      f"Percentage={percentage}"
+        if flag[3]['type'] == 'same_orientation':
+            rgb = f"150,200,150"
+        else:
+            rgb = '0,0,0'
 
         text += f"{region}\t{description}\t0\t.\t{flag[1]}\t{flag[2]}\t{rgb}\n"
 
