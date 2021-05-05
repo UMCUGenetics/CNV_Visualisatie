@@ -11,6 +11,10 @@ parser.add_argument('--log', '-l', required=False, default=True, type=bool,
                     help='Bool specifying if logfile should be made.')
 parser.add_argument('--threshold', '-t', required=False, default=0, type=int, help='int specifying the minimun amount'
                                                                                     'of reads before a flag is made')
+parser.add_argument('--minpercentage', '-mp', required=False, default=0, type=float, help='float specifying the'
+                                                                                          'threshold for the minimum'
+                                                                                          'percentage of total reads in'
+                                                                                          'region before flagged.')
 parser.add_argument('--region', '-r', required=False, default='', type=str, help='String specifying the region in '
                                                                                  'format: "chr#:start-stop". use '
                                                                                  'chr#:0-0 for whole chromosome.')
@@ -45,7 +49,7 @@ def place_flags(reads):
     with their information.
 
     :param reads: Pysam object containing read information
-    :return flags: A 2d list containing the coordinates of the flags and additional information.
+    :return all_flags: A 2d list containing the coordinates of the flags and additional information.
     """
     all_flags = []
     chromosome = args.region.split(':')[0].replace('chr', '')
@@ -56,12 +60,14 @@ def place_flags(reads):
 
     for read in reads:
         if not read.is_unmapped:
+            start, end = true_position(read)
             # place flag if read and its mate have the same orientation
             if issameorientation(read):
                 flags, isbuildingflags = generate_flag(read, flags, isbuildingflags, 0)
 
-            elif not issameorientation(read) and isbuildingflags[0] and read.positions[0] > flags[0][2]:
-                if flags[0][3]['count'] > args.threshold:
+            elif not issameorientation(read) and isbuildingflags[0] and start > flags[0][2]:
+                percentage = round(flags[0][3]['count'] / flags[0][3]['total'], 2)
+                if flags[0][3]['count'] > args.threshold and percentage > args.minpercentage:
                     all_flags.append(flags[0])
                 flags[0] = [chromosome, None, None, {'type': 'same_orientation', 'count': 0, 'total': 0}]
                 isbuildingflags[0] = False
@@ -71,8 +77,9 @@ def place_flags(reads):
                 flags, isbuildingflags = generate_flag(read, flags, isbuildingflags, 1)
                 flags[1][3]['lengths'].append(read.isize)
 
-            elif not read.isize > args.high_insert_size and isbuildingflags[1] and read.positions[0] > flags[1][2]:
-                if flags[1][3]['count'] > args.threshold:
+            elif not read.isize > args.high_insert_size and isbuildingflags[1] and start > flags[1][2]:
+                percentage = round(flags[1][3]['count'] / flags[1][3]['total'], 2)
+                if flags[1][3]['count'] > args.threshold and percentage > args.minpercentage:
                     all_flags.append(flags[1])
                 flags[1] = [chromosome, None, None, {'type': 'high_insert_size', 'count': 0, 'total': 0, 'lengths': []}]
                 isbuildingflags[1] = False
@@ -83,6 +90,12 @@ def place_flags(reads):
 
 
 def update_total(flags):
+    """ The update_total function iterates over all the flag types and increments the total number of reads it has
+    encountered by 1.
+
+    :param flags: a 2d list containing all the flag information.
+    return flags: a 2d list containing all the flag information.
+    """
     for flag in flags:
         flag[3]['total'] += 1
 
@@ -90,17 +103,50 @@ def update_total(flags):
 
 
 def generate_flag(read, flags, isbuildingflags, flagindex):
+    """ The generate_flag function receives a read and decides if it should be included in the current working flag or
+    not. Or it starts the creation of a new flag.
+
+    :param read: pysam object containing data of a read.
+    :param flags: a 2d list containing all the flag information.
+    :param isbuildingflags; a list identifying which types of flags are being built/edited
+    :param flagindex: an integer identifying which flag is being built/edited
+    :return flags: a 2d list containing all the flag information.
+    :return isbuildingflags: a list identifying which types of flags are being built/edited
+    """
+    start, end = true_position(read)
+
     if not isbuildingflags[flagindex]:
-        flags[flagindex][1] = read.positions[0]
-        flags[flagindex][2] = read.positions[-1]
+        flags[flagindex][1] = start
+        flags[flagindex][2] = end
         isbuildingflags[flagindex] = True
 
     if isbuildingflags[flagindex]:
-        flags[flagindex][2] = read.positions[-1]
+        flags[flagindex][2] = end
 
     flags[flagindex][3]['count'] += 1
 
     return flags, isbuildingflags
+
+
+def true_position(read):
+    """ The true_position function receives a read and determines the start of the read as presented in igv by including
+    unmapped basepairs.
+
+    :param read: pysam object containing data of a read.
+    :return start: an integer indicating the true start of a read.
+    :return end: an integer idicating the true end of a read.
+    """
+    cigar = read.cigar
+    start = read.positions[0]
+    end = read.positions[-1]
+
+    if cigar[0][0] != 0:
+        start -= cigar[0][1]
+
+    if cigar[-1][0] != 0:
+        end += cigar[-1][1]
+
+    return start, end
 
 
 def issameorientation(read):
