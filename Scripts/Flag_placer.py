@@ -1,5 +1,6 @@
 import pysam
 from datetime import datetime, date
+from statistics import mean, median
 import os
 import argparse
 
@@ -13,6 +14,8 @@ parser.add_argument('--threshold', '-t', required=False, default=0, type=int, he
 parser.add_argument('--region', '-r', required=False, default='', type=str, help='String specifying the region in '
                                                                                  'format: "chr#:start-stop". use '
                                                                                  'chr#:0-0 for whole chromosome.')
+parser.add_argument('--high_insert_size', '-hi', required=False, default=500, type=int,
+                    help='Length of insert size to be classified as high.')
 
 args = parser.parse_args()
 
@@ -49,12 +52,13 @@ def place_flags(reads):
 
     isbuildingflags = [False, False]
     flags = [[chromosome, None, None, {'type': 'same_orientation', 'count': 0, 'total': 0}],
-             [chromosome, None, None, {'type': str, 'count': 0, 'total': 0}]]
+             [chromosome, None, None, {'type': 'high_insert_size', 'count': 0, 'total': 0, 'lengths': []}]]
 
     for read in reads:
         if not read.is_unmapped:
+            # place flag if read and its mate have the same orientation
             if issameorientation(read):
-                flags, isbuildingflags = same_orientation_flag(read, flags, isbuildingflags)
+                flags, isbuildingflags = generate_flag(read, flags, isbuildingflags, 0)
 
             elif not issameorientation(read) and isbuildingflags[0] and read.positions[0] > flags[0][2]:
                 if flags[0][3]['count'] > args.threshold:
@@ -62,33 +66,39 @@ def place_flags(reads):
                 flags[0] = [chromosome, None, None, {'type': 'same_orientation', 'count': 0, 'total': 0}]
                 isbuildingflags[0] = False
 
+            # place flag if read has high insert size.
+            if read.isize > args.high_insert_size:
+                flags, isbuildingflags = generate_flag(read, flags, isbuildingflags, 1)
+                flags[1][3]['lengths'].append(read.isize)
+
+            elif not read.isize > args.high_insert_size and isbuildingflags[1] and read.positions[0] > flags[1][2]:
+                if flags[1][3]['count'] > args.threshold:
+                    all_flags.append(flags[1])
+                flags[1] = [chromosome, None, None, {'type': 'high_insert_size', 'count': 0, 'total': 0, 'lengths': []}]
+                isbuildingflags[1] = False
+
             flags = update_total(flags)
 
     return all_flags
 
 
 def update_total(flags):
-
     for flag in flags:
-        total = flag[3]['total']
-        total += 1
-        flag[3].update({'total': total})
+        flag[3]['total'] += 1
 
     return flags
 
 
-def same_orientation_flag(read, flags, isbuildingflags):
-    if not isbuildingflags[0]:
-        flags[0][1] = read.positions[0]
-        flags[0][2] = read.positions[-1]
-        isbuildingflags[0] = True
+def generate_flag(read, flags, isbuildingflags, flagindex):
+    if not isbuildingflags[flagindex]:
+        flags[flagindex][1] = read.positions[0]
+        flags[flagindex][2] = read.positions[-1]
+        isbuildingflags[flagindex] = True
 
-    if isbuildingflags[0]:
-        flags[0][2] = read.positions[-1]
+    if isbuildingflags[flagindex]:
+        flags[flagindex][2] = read.positions[-1]
 
-    counter = flags[0][3]['count']
-    counter += 1
-    flags[0][3].update({'count': counter})
+    flags[flagindex][3]['count'] += 1
 
     return flags, isbuildingflags
 
@@ -123,10 +133,17 @@ def write_bedfile(flags):
         region = f"{flag[0]}\t{flag[1]}\t{flag[2]}"
         description = f"Name={flag[3]['type']};Readcount={flag[3]['count']};Total_reads={flag[3]['total']};" \
                       f"Percentage={percentage}"
+
+        if flag[3]['type'] == 'high_insert_size':
+            lengths = flag[3]['lengths']
+            description += f";Avg_insert_size={round(mean(lengths))};Med_insert_size={round(median(lengths))};" \
+                           f"Lower_limit={min(lengths)};Upper_limit={max(lengths)}"
+
         if flag[3]['type'] == 'same_orientation':
             rgb = f"150,200,150"
-        else:
-            rgb = '0,0,0'
+
+        elif flag[3]['type'] == 'high_insert_size':
+            rgb = f"200,150,150"
 
         text += f"{region}\t{description}\t0\t.\t{flag[1]}\t{flag[2]}\t{rgb}\n"
 
