@@ -10,6 +10,9 @@ parser.add_argument('--log', '-l', required=False, default=True, type=bool,
                     help='Bool specifying if logfile should be made.')
 parser.add_argument('--threshold', '-t', required=False, default=0, type=int, help='int specifying the minimun amount'
                                                                                     'of reads before a flag is made')
+parser.add_argument('--region', '-r', required=False, default='', type=str, help='String specifying the region in '
+                                                                                 'format: "chr#:start-stop". use '
+                                                                                 'chr#:0-0 for whole chromosome.')
 
 args = parser.parse_args()
 
@@ -21,7 +24,15 @@ def fetch_reads():
     """
     bamfile = pysam.AlignmentFile(args.bam, 'rb')
 
-    reads = bamfile.fetch('3')
+    chromosome = args.region.split(':')[0].replace('chr', '')
+    start = args.region.split(':')[1].split('-')[0]
+    end = args.region.split(':')[1].split('-')[1]
+
+    if start == '0' and end == '0':
+        reads = bamfile.fetch(chromosome)
+
+    else:
+        reads = bamfile.fetch(chromosome, int(start), int(end))
 
     return reads
 
@@ -86,7 +97,7 @@ def write_bedfile(flags):
         region = f"{flag[0]}\t{flag[1]}\t{flag[2]}"
         text += f"{region}\tName=Same_facing_reads;Readcount={flag[3]}\n"
 
-    with open(args.output + '/outputheatmap.bed', 'w') as bedfile:
+    with open(args.output + '/output_flags.bed', 'w') as bedfile:
         bedfile.write(text)
 
 
