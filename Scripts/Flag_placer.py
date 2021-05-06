@@ -54,39 +54,90 @@ def place_flags(reads):
     all_flags = []
     chromosome = args.region.split(':')[0].replace('chr', '')
 
-    isbuildingflags = [False, False]
+    isbuildingflags = [False, False, False, False]
     flags = [[chromosome, None, None, {'type': 'same_orientation', 'count': 0, 'total': 0}],
-             [chromosome, None, None, {'type': 'high_insert_size', 'count': 0, 'total': 0, 'lengths': []}]]
+             [chromosome, None, None, {'type': 'high_insert_size', 'count': 0, 'total': 0, 'lengths': []}],
+             [chromosome, None, None, {'type': 'unmapped_mate', 'count': 0, 'total': 0}],
+             [chromosome, None, None, {'type': 'softclips', 'count': 0, 'total': 0, 'bases': []}]]
 
     for read in reads:
         if not read.is_unmapped:
             start, end = true_position(read)
             # place flag if read and its mate have the same orientation
-            if issameorientation(read):
-                flags, isbuildingflags = generate_flag(read, flags, isbuildingflags, 0)
-
-            elif not issameorientation(read) and isbuildingflags[0] and start > flags[0][2]:
-                percentage = round(flags[0][3]['count'] / flags[0][3]['total'], 2)
-                if flags[0][3]['count'] > args.threshold and percentage > args.minpercentage:
-                    all_flags.append(flags[0])
-                flags[0] = [chromosome, None, None, {'type': 'same_orientation', 'count': 0, 'total': 0}]
-                isbuildingflags[0] = False
+            flags, isbuildingflags, all_flags = flag_sameorientation(read, flags, isbuildingflags, all_flags,
+                                                                     chromosome, start)
 
             # place flag if read has high insert size.
-            if read.isize > args.high_insert_size:
-                flags, isbuildingflags = generate_flag(read, flags, isbuildingflags, 1)
-                flags[1][3]['lengths'].append(read.isize)
+            flags, isbuildingflags, all_flags = flag_high_isize(read, flags, isbuildingflags, all_flags, chromosome,
+                                                                start)
+            # place flag if read has unmapped mate.
+            flags, isbuildingflags, all_flags = flag_unmapped_mate(read, flags, isbuildingflags, all_flags, chromosome,
+                                                                   start)
 
-            elif not read.isize > args.high_insert_size and isbuildingflags[1] and start > flags[1][2]:
-                percentage = round(flags[1][3]['count'] / flags[1][3]['total'], 2)
-                if flags[1][3]['count'] > args.threshold and percentage > args.minpercentage:
-                    all_flags.append(flags[1])
-                flags[1] = [chromosome, None, None, {'type': 'high_insert_size', 'count': 0, 'total': 0, 'lengths': []}]
-                isbuildingflags[1] = False
-
+            #place flag if read has sofclip bases.
+            flags, isbuildingflags, all_flags = flag_softclips(read, flags, isbuildingflags, all_flags, chromosome,
+                                                                   start)
             flags = update_total(flags)
 
     return all_flags
+
+
+def flag_sameorientation(read, flags, isbuildingflags, all_flags, chromosome, start):
+    if issameorientation(read):
+        flags, isbuildingflags = generate_flag(read, flags, isbuildingflags, 0)
+
+    elif not issameorientation(read) and isbuildingflags[0] and start > flags[0][2]:
+        percentage = round(flags[0][3]['count'] / flags[0][3]['total'], 2)
+        if flags[0][3]['count'] > args.threshold and percentage > args.minpercentage:
+            all_flags.append(flags[0])
+        flags[0] = [chromosome, None, None, {'type': 'same_orientation', 'count': 0, 'total': 0}]
+        isbuildingflags[0] = False
+
+    return flags, isbuildingflags, all_flags
+
+
+def flag_high_isize(read, flags, isbuildingflags, all_flags, chromosome, start):
+    if read.isize > args.high_insert_size:
+        flags, isbuildingflags = generate_flag(read, flags, isbuildingflags, 1)
+        flags[1][3]['lengths'].append(read.isize)
+
+    elif not read.isize > args.high_insert_size and isbuildingflags[1] and start > flags[1][2]:
+        percentage = round(flags[1][3]['count'] / flags[1][3]['total'], 2)
+        if flags[1][3]['count'] > args.threshold and percentage > args.minpercentage:
+            all_flags.append(flags[1])
+        flags[1] = [chromosome, None, None, {'type': 'high_insert_size', 'count': 0, 'total': 0, 'lengths': []}]
+        isbuildingflags[1] = False
+
+    return flags, isbuildingflags, all_flags
+
+
+def flag_unmapped_mate(read, flags, isbuildingflags, all_flags, chromosome, start):
+    if read.mate_is_unmapped:
+        flags, isbuildingflags = generate_flag(read, flags, isbuildingflags, 2)
+
+    elif not read.mate_is_unmapped and isbuildingflags[2] and start > flags[2][2]:
+        percentage = round(flags[2][3]['count'] / flags[2][3]['total'], 2)
+        if flags[2][3]['count'] > args.threshold and percentage > args.minpercentage:
+            all_flags.append(flags[2])
+        flags[2] = [chromosome, None, None, {'type': 'unmapped_mate', 'count': 0, 'total': 0}]
+        isbuildingflags[2] = False
+
+    return flags, isbuildingflags, all_flags
+
+
+def flag_softclips(read, flags, isbuildingflags, all_flags, chromosome, start):
+    if has_softclips(read):
+        flags, isbuildingflags = generate_flag(read, flags, isbuildingflags, 2)
+        flags[3][3]['bases'].append(softclipbases(read))
+
+    elif not read.isize > args.high_insert_size and isbuildingflags[3] and start > flags[3][2]:
+        percentage = round(flags[3][3]['count'] / flags[3][3]['total'], 3)
+        if flags[3][3]['count'] > args.threshold and percentage > args.minpercentage:
+            all_flags.append(flags[3])
+        flags[3] = [chromosome, None, None, {'type': 'softclips', 'count': 0, 'total': 0, 'bases': []}]
+        isbuildingflags[3] = False
+
+    return flags, isbuildingflags, all_flags
 
 
 def update_total(flags):
@@ -164,13 +215,32 @@ def issameorientation(read):
             return False
 
 
+def has_softclips(read):
+    cigar = read.cigar
+    for element in cigar:
+        if element[0] == 4:
+            return True
+
+    return False
+
+
+def softclipbases(read):
+    cigar = read.cigar
+    sofclipbases = 0
+
+    for element in cigar:
+        if element[0] == 4:
+            sofclipbases += element[1]
+
+    return sofclipbases
+
+
 def write_bedfile(flags):
     """ The write_bedfile function writes a file in BED format that can be loaded in igv and visualises the read data.
 
     :param regions: a list of coordinates specified in the vcf file.
     :param read_data: a 2d list containing the read data of every region.
     """
-    # TODO: add color scaling to rgb
     text = 'track name=same_direction_reads description="Region_Summary." db=hg19 gffTags=on itemRGB="On"\n'
 
     for flag in flags:
@@ -182,8 +252,13 @@ def write_bedfile(flags):
 
         if flag[3]['type'] == 'high_insert_size':
             lengths = flag[3]['lengths']
-            description += f";Avg_insert_size={round(mean(lengths))};Med_insert_size={round(median(lengths))};" \
+            description += f";Avg_insert_size={round(mean(lengths))};Med_insert_size={median(lengths)};" \
                            f"Lower_limit={min(lengths)};Upper_limit={max(lengths)}"
+
+        if flag[3]['type'] == 'softclips':
+            bases = flag[3]['bases']
+            description += f"Avg_sofclip_bases={round(mean(bases))};Med_sofclip_bases={median(bases)};" \
+                           f"Lower_limit={min(bases)};Upper_limit={max(bases)}"
 
         if flag[3]['type'] == 'same_orientation':
             rgb = f"150,200,150"
@@ -191,9 +266,15 @@ def write_bedfile(flags):
         elif flag[3]['type'] == 'high_insert_size':
             rgb = f"200,150,150"
 
+        elif flag[3]['type'] == 'unmapped_mate':
+            rgb = f"150,150,200"
+
+        elif flag[3]['type'] == 'sofclips':
+            rgb = f"150,200,200"
+
         text += f"{region}\t{description}\t0\t.\t{flag[1]}\t{flag[2]}\t{rgb}\n"
 
-    with open(args.output + '/output_flags.bed', 'w') as bedfile:
+    with open(args.output + f'/{args.region}_flags.bed', 'w') as bedfile:
         bedfile.write(text)
 
 
@@ -204,11 +285,12 @@ def write_logfile():
     current_time = datetime.now().strftime("%H:%M:%S")
     current_day = date.today().strftime("%d/%m/%Y")
 
-    text = f'Logfile created by: {current_path}\nScript finished at: {current_time} {current_day}\n{"-"*80}\n' \
-           f'Parameters:\nBamfile: {args.bam}\nOutput_folder: {args.output}\n' \
-           f'Read threshold: {args.threshold}\n'
+    text = f'Logfile created by: {current_path}\nScript finished at: {current_time} {current_day}\n{"-"*40}' \
+           f'Parameters{"-"*40}\nRegion: {args.region}\nBamfile: {args.bam}\nOutput_folder: {args.output}\n' \
+           f'Read threshold: {args.threshold}\nInsert size threshold: {args.high_insert_size}\n' \
+           f'Minimal percentage: {args.minpercentage}'
 
-    with open(args.output + '/log.txt', 'w') as logfile:
+    with open(args.output + f'/{args.region}_flag_log.txt', 'w') as logfile:
         logfile.write(text)
 
 
