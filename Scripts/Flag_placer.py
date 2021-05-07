@@ -31,15 +31,19 @@ def fetch_reads():
     """
     bamfile = pysam.AlignmentFile(args.bam, 'rb')
 
-    chromosome = args.region.split(':')[0].replace('chr', '')
-    start = args.region.split(':')[1].split('-')[0]
-    end = args.region.split(':')[1].split('-')[1]
-
-    if start == '0' and end == '0':
-        reads = bamfile.fetch(chromosome)
+    if args.region == 'all':
+        reads = bamfile.fetch()
 
     else:
-        reads = bamfile.fetch(chromosome, int(start), int(end))
+        chromosome = args.region.split(':')[0].replace('chr', '')
+        start = args.region.split(':')[1].split('-')[0]
+        end = args.region.split(':')[1].split('-')[1]
+
+        if start == '0' and end == '0':
+            reads = bamfile.fetch(chromosome)
+
+        else:
+            reads = bamfile.fetch(chromosome, int(start), int(end))
 
     return reads
 
@@ -61,9 +65,9 @@ def place_flags(reads):
              [chromosome, None, None, {'type': 'softclips', 'count': 0, 'total': 0, 'bases': []}]]
 
     for read in reads:
-        if not read.is_unmapped:
+        if not read.is_unmapped and len(read.positions) != 0:
             start, end = true_position(read)
-            # place flag if read and its mate have the same orientation
+            # place flag if read and its mate have the same orientation.
             flags, isbuildingflags, all_flags = flag_sameorientation(read, flags, isbuildingflags, all_flags,
                                                                      chromosome, start)
 
@@ -73,11 +77,10 @@ def place_flags(reads):
             # place flag if read has unmapped mate.
             flags, isbuildingflags, all_flags = flag_unmapped_mate(read, flags, isbuildingflags, all_flags, chromosome,
                                                                    start)
-
-            #place flag if read has sofclip bases.
+            # place flag if read has sofclip bases.
             flags, isbuildingflags, all_flags = flag_softclips(read, flags, isbuildingflags, all_flags, chromosome,
                                                                    start)
-            flags = update_total(flags)
+            flags = update_total(flags, isbuildingflags)
 
     return all_flags
 
@@ -127,10 +130,10 @@ def flag_unmapped_mate(read, flags, isbuildingflags, all_flags, chromosome, star
 
 def flag_softclips(read, flags, isbuildingflags, all_flags, chromosome, start):
     if has_softclips(read):
-        flags, isbuildingflags = generate_flag(read, flags, isbuildingflags, 2)
+        flags, isbuildingflags = generate_flag(read, flags, isbuildingflags, 3)
         flags[3][3]['bases'].append(softclipbases(read))
 
-    elif not read.isize > args.high_insert_size and isbuildingflags[3] and start > flags[3][2]:
+    elif not has_softclips(read) and isbuildingflags[3] and start > flags[3][2]:
         percentage = round(flags[3][3]['count'] / flags[3][3]['total'], 3)
         if flags[3][3]['count'] > args.threshold and percentage > args.minpercentage:
             all_flags.append(flags[3])
@@ -140,15 +143,16 @@ def flag_softclips(read, flags, isbuildingflags, all_flags, chromosome, start):
     return flags, isbuildingflags, all_flags
 
 
-def update_total(flags):
+def update_total(flags, isbuildingflags):
     """ The update_total function iterates over all the flag types and increments the total number of reads it has
     encountered by 1.
 
     :param flags: a 2d list containing all the flag information.
     return flags: a 2d list containing all the flag information.
     """
-    for flag in flags:
-        flag[3]['total'] += 1
+    for index in range(0, len(flags)):
+        if isbuildingflags[index]:
+            flags[index][3]['total'] += 1
 
     return flags
 
@@ -187,15 +191,18 @@ def true_position(read):
     :return start: an integer indicating the true start of a read.
     :return end: an integer idicating the true end of a read.
     """
-    cigar = read.cigar
-    start = read.positions[0]
-    end = read.positions[-1]
+    try:
+        cigar = read.cigar
+        start = read.positions[0]
+        end = read.positions[-1]
 
-    if cigar[0][0] != 0:
-        start -= cigar[0][1]
+        if cigar[0][0] != 0:
+            start -= cigar[0][1]
 
-    if cigar[-1][0] != 0:
-        end += cigar[-1][1]
+        if cigar[-1][0] != 0:
+            end += cigar[-1][1]
+    except:
+        print(read)
 
     return start, end
 
@@ -241,7 +248,7 @@ def write_bedfile(flags):
     :param regions: a list of coordinates specified in the vcf file.
     :param read_data: a 2d list containing the read data of every region.
     """
-    text = 'track name=same_direction_reads description="Region_Summary." db=hg19 gffTags=on itemRGB="On"\n'
+    text = 'track name=Flags description="Flags regions of interest." db=hg19 gffTags=on itemRGB="On"\n'
 
     for flag in flags:
         percentage = round(flag[3]['count'] / flag[3]['total'], 2)
@@ -257,20 +264,20 @@ def write_bedfile(flags):
 
         if flag[3]['type'] == 'softclips':
             bases = flag[3]['bases']
-            description += f"Avg_sofclip_bases={round(mean(bases))};Med_sofclip_bases={median(bases)};" \
+            description += f";Avg_sofclip_bases={round(mean(bases))};Med_sofclip_bases={median(bases)};" \
                            f"Lower_limit={min(bases)};Upper_limit={max(bases)}"
 
         if flag[3]['type'] == 'same_orientation':
-            rgb = f"150,200,150"
+            rgb = f"0,192,199"
 
         elif flag[3]['type'] == 'high_insert_size':
-            rgb = f"200,150,150"
+            rgb = f"232,135,26"
 
         elif flag[3]['type'] == 'unmapped_mate':
-            rgb = f"150,150,200"
+            rgb = f"218,52,144"
 
-        elif flag[3]['type'] == 'sofclips':
-            rgb = f"150,200,200"
+        elif flag[3]['type'] == 'softclips':
+            rgb = f"71,226,111"
 
         text += f"{region}\t{description}\t0\t.\t{flag[1]}\t{flag[2]}\t{rgb}\n"
 
