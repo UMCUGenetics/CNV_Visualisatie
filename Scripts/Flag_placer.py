@@ -56,6 +56,7 @@ def place_flags(reads):
     :return all_flags: A 2d list containing the coordinates of the flags and additional information.
     """
     all_flags = []
+    read_data = [0, 0, 0]
     chromosome = args.region.split(':')[0].replace('chr', '')
 
     isbuildingflags = [False, False, False, False]
@@ -82,10 +83,30 @@ def place_flags(reads):
                                                                    start)
             flags = update_total(flags, isbuildingflags)
 
-    return all_flags
+        elif read.is_unmapped:
+            read_data[1] += 1
+        elif len(read.positions) == 0:
+            read_data[2] += 1
+        read_data[0] += 1
+
+    return all_flags, read_data
 
 
 def flag_sameorientation(read, flags, isbuildingflags, all_flags, chromosome, start):
+    """ The flag_sameorientation function checks if the current read should be added to a same_orientation flag or
+    start creating a same_orientation flag.
+
+    :param read: pysam object containing data of a read.
+    :param flags: a 2d list containing all the flag information.
+    :param isbuildingflags: a list indicating which flags are currently being built.
+    :param all_flags: A 2d list containing the coordinates of the flags and additional information.
+    :param chromosome: The chromosome where the read is mapped.
+    :param start: Integer indicating the starting position of the read.
+
+    :return flags: a 2d list containing all the flag information.
+    :return isbuildingflags: a list indicating which flags are currently being built.
+    :return all_flags: A 2d list containing the coordinates of the flags and additional information.
+    """
     if issameorientation(read):
         flags, isbuildingflags = generate_flag(read, flags, isbuildingflags, 0)
 
@@ -100,6 +121,20 @@ def flag_sameorientation(read, flags, isbuildingflags, all_flags, chromosome, st
 
 
 def flag_high_isize(read, flags, isbuildingflags, all_flags, chromosome, start):
+    """ The flag_high_isize function checks if the current read should be added to a high_insert_size flag or start
+    creating a high_isize_flag.
+
+    :param read: pysam object containing data of a read.
+    :param flags: a 2d list containing all the flag information.
+    :param isbuildingflags: a list indicating which flags are currently being built.
+    :param all_flags: A 2d list containing the coordinates of the flags and additional information.
+    :param chromosome: The chromosome where the read is mapped.
+    :param start: Integer indicating the starting position of the read.
+
+    :return flags: a 2d list containing all the flag information.
+    :return isbuildingflags: a list indicating which flags are currently being built.
+    :return all_flags: A 2d list containing the coordinates of the flags and additional information.
+    """
     if read.isize > args.high_insert_size:
         flags, isbuildingflags = generate_flag(read, flags, isbuildingflags, 1)
         flags[1][3]['lengths'].append(read.isize)
@@ -115,6 +150,20 @@ def flag_high_isize(read, flags, isbuildingflags, all_flags, chromosome, start):
 
 
 def flag_unmapped_mate(read, flags, isbuildingflags, all_flags, chromosome, start):
+    """ The flag_unmapped_mate function checks if the current read should be added to the unmapped_mate flag or start
+    creating a unmapped_mate flag.
+
+    :param read: pysam object containing data of a read.
+    :param flags: a 2d list containing all the flag information.
+    :param isbuildingflags: a list indicating which flags are currently being built.
+    :param all_flags: A 2d list containing the coordinates of the flags and additional information.
+    :param chromosome: The chromosome where the read is mapped.
+    :param start: Integer indicating the starting position of the read.
+
+    :return flags: a 2d list containing all the flag information.
+    :return isbuildingflags: a list indicating which flags are currently being built.
+    :return all_flags: A 2d list containing the coordinates of the flags and additional information.
+    """
     if read.mate_is_unmapped:
         flags, isbuildingflags = generate_flag(read, flags, isbuildingflags, 2)
 
@@ -129,6 +178,20 @@ def flag_unmapped_mate(read, flags, isbuildingflags, all_flags, chromosome, star
 
 
 def flag_softclips(read, flags, isbuildingflags, all_flags, chromosome, start):
+    """ The flag_sofclips function checks if the current read should be added to the softclips flag or start creating a
+    softclips flag.
+
+    :param read: pysam object containing data of a read.
+    :param flags: a 2d list containing all the flag information.
+    :param isbuildingflags: a list indicating which flags are currently being built.
+    :param all_flags: A 2d list containing the coordinates of the flags and additional information.
+    :param chromosome: The chromosome where the read is mapped.
+    :param start: Integer indicating the starting position of the read.
+
+    :return flags: a 2d list containing all the flag information.
+    :return isbuildingflags: a list indicating which flags are currently being built.
+    :return all_flags: A 2d list containing the coordinates of the flags and additional information.
+    """
     if has_softclips(read):
         flags, isbuildingflags = generate_flag(read, flags, isbuildingflags, 3)
         flags[3][3]['bases'].append(softclipbases(read))
@@ -191,18 +254,16 @@ def true_position(read):
     :return start: an integer indicating the true start of a read.
     :return end: an integer idicating the true end of a read.
     """
-    try:
-        cigar = read.cigar
-        start = read.positions[0]
-        end = read.positions[-1]
+    cigar = read.cigar
+    start = read.positions[0]
+    end = read.positions[-1]
 
-        if cigar[0][0] != 0:
-            start -= cigar[0][1]
+    if cigar[0][0] != 0:
+        start -= cigar[0][1]
 
-        if cigar[-1][0] != 0:
-            end += cigar[-1][1]
-    except:
-        print(read)
+    if cigar[-1][0] != 0:
+        end += cigar[-1][1]
+
 
     return start, end
 
@@ -223,6 +284,11 @@ def issameorientation(read):
 
 
 def has_softclips(read):
+    """ The has_softclips function receives a read and returns true is the read contains softclips.
+
+    :param read: Pysam object containing data of a read.
+    :return bool: A boolean returning true if read contains softclips.
+    """
     cigar = read.cigar
     for element in cigar:
         if element[0] == 4:
@@ -232,6 +298,11 @@ def has_softclips(read):
 
 
 def softclipbases(read):
+    """ The softclipbases function receives a read and returns the number of bases in the read that are softclips.
+
+    :param read: A Pysam object containing data of a read.
+    :return softclipbases: An integer representing the number of softclipbases in the read.
+    """
     cigar = read.cigar
     sofclipbases = 0
 
@@ -285,17 +356,39 @@ def write_bedfile(flags):
         bedfile.write(text)
 
 
-def write_logfile():
+def sort_flags(flags):
+    """ The sort_flags function sorts the flags on starting position using insertionsort.
+
+    :param flags: a 2d list containing all the flag information.
+    :return flags: a 2d list containing all the flag information.
+    """
+    for i in range(1, len(flags)):
+        key = flags[i][1]
+
+        j = i - 1
+        while j >= 0 and key < flags[j][1] and flags[i][0] == flags[j][0]:
+            #flags = swap(flags, j+1, j)
+            temp = flags[j+1]
+            flags[j+1] = flags[j]
+            flags[j] = temp
+            j -= 1
+        flags[j + 1][1] = key
+
+    return flags
+
+
+def write_logfile(read_data):
     """ The write logfile function writes a log.txt file in the output folder and writes all the parameters down."""
     current_path = os.getcwd()
 
     current_time = datetime.now().strftime("%H:%M:%S")
     current_day = date.today().strftime("%d/%m/%Y")
 
-    text = f'Logfile created by: {current_path}\nScript finished at: {current_time} {current_day}\n{"-"*40}' \
-           f'Parameters{"-"*40}\nRegion: {args.region}\nBamfile: {args.bam}\nOutput_folder: {args.output}\n' \
-           f'Read threshold: {args.threshold}\nInsert size threshold: {args.high_insert_size}\n' \
-           f'Minimal percentage: {args.minpercentage}'
+    text = f'Logfile created by: {current_path}/Flag_placer.py\nScript finished at: {current_time} {current_day}\n' \
+           f'{"-"*40}Read data{"-"*40}\nTotal reads: {read_data[0]}\nUnmapped reads: {read_data[1]}\n' \
+           f'Reads without matches: {read_data[2]}\n{"-"*40}Parameters{"-"*40}\nRegion: {args.region}\n' \
+           f'Bamfile: {args.bam}\nOutput_folder: {args.output}\nRead threshold: {args.threshold}\n' \
+           f'Insert size threshold: {args.high_insert_size}\nMinimal percentage: {args.minpercentage}'
 
     with open(args.output + f'/{args.region}_flag_log.txt', 'w') as logfile:
         logfile.write(text)
@@ -306,9 +399,14 @@ if __name__ == '__main__':
 
     reads = fetch_reads()  # get all reads at the regions from the vcf call.
 
-    flags = place_flags(reads)  # retrieve data from reads.
+    flags, read_data = place_flags(reads)  # retrieve data from reads.
 
-    write_bedfile(flags)  # write the result in a BED file.
+    sorted_flags = sort_flags(flags)  # sort flags on start position.
+
+    write_bedfile(sorted_flags)  # write the result in a BED file.
+
+    print(f'Process finished succesfully.\nTotal reads: {read_data[0]}\nUnmapped reads: {read_data[1]}\n'
+          f'Reads without matches: {read_data[2]}')
 
     if args.log:
-        write_logfile()  # write logfile with parameters
+         write_logfile(read_data)  # write logfile with parameters
