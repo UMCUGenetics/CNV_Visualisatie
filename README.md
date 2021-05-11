@@ -20,7 +20,7 @@ To check if the installation was successful navigate to the Scripts folder and t
 If installation went correctly a help menu should appear in your terminal.
 
 ## Usage
-###CNV_vis.py
+### CNV_vis.py
 The script can be called from the terminal using the following command:
 
 `$ python3 CNV_vis.py --bam path/to/bamfile.bam --vcf_file path/to/vcffile.vcf`
