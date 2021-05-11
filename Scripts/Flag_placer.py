@@ -367,7 +367,6 @@ def sort_flags(flags):
 
         j = i - 1
         while j >= 0 and key < flags[j][1] and flags[i][0] == flags[j][0]:
-            #flags = swap(flags, j+1, j)
             temp = flags[j+1]
             flags[j+1] = flags[j]
             flags[j] = temp
