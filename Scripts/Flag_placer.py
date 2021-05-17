@@ -7,7 +7,7 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('--bam', '-b', required=True, type=str, help='Path to bam file.')
 parser.add_argument('--output', '-o', required=False, type=str, help='Path to output folder.')
-parser.add_argument('--log', '-l', required=False, default=True, type=bool,
+parser.add_argument('--log', '-l', required=False, default=False, type=bool,
                     help='Bool specifying if logfile should be made.')
 parser.add_argument('--threshold', '-t', required=False, default=0, type=int, help='int specifying the minimun amount'
                                                                                     'of reads before a flag is made')
@@ -20,6 +20,8 @@ parser.add_argument('--region', '-r', required=False, default='', type=str, help
                                                                                  'chr#:0-0 for whole chromosome.')
 parser.add_argument('--high_insert_size', '-hi', required=False, default=500, type=int,
                     help='Length of insert size to be classified as high.')
+parser.add_argument('--name', '-n', required=False, default='output', type=str, help='Name for the project. This is'
+                                                                                         'the name of the output file.')
 
 args = parser.parse_args()
 
@@ -135,11 +137,12 @@ def flag_high_isize(read, flags, isbuildingflags, all_flags, chromosome, start):
     :return isbuildingflags: a list indicating which flags are currently being built.
     :return all_flags: A 2d list containing the coordinates of the flags and additional information.
     """
-    if read.isize > args.high_insert_size:
+    if read.isize > args.high_insert_size or read.isize < (args.high_insert_size * -1):
         flags, isbuildingflags = generate_flag(read, flags, isbuildingflags, 1)
         flags[1][3]['lengths'].append(read.isize)
 
-    elif not read.isize > args.high_insert_size and isbuildingflags[1] and start > flags[1][2]:
+    elif not (read.isize > args.high_insert_size or read.isize < (args.high_insert_size * -1)) and isbuildingflags[1]\
+            and start > flags[1][2]:
         percentage = round(flags[1][3]['count'] / flags[1][3]['total'], 2)
         if flags[1][3]['count'] > args.threshold and percentage > args.minpercentage:
             all_flags.append(flags[1])
@@ -264,7 +267,6 @@ def true_position(read):
     if cigar[-1][0] != 0:
         end += cigar[-1][1]
 
-
     return start, end
 
 
@@ -316,8 +318,7 @@ def softclipbases(read):
 def write_bedfile(flags):
     """ The write_bedfile function writes a file in BED format that can be loaded in igv and visualises the read data.
 
-    :param regions: a list of coordinates specified in the vcf file.
-    :param read_data: a 2d list containing the read data of every region.
+    :param flags: a 2d list containing all the flag information.
     """
     text = 'track name=Flags description="Flags regions of interest." db=hg19 gffTags=on itemRGB="On"\n'
 
@@ -352,7 +353,7 @@ def write_bedfile(flags):
 
         text += f"{region}\t{description}\t0\t.\t{flag[1]}\t{flag[2]}\t{rgb}\n"
 
-    with open(args.output + f'/{args.region}_flags.bed', 'w') as bedfile:
+    with open(args.output + f'/{args.name}.bed', 'w') as bedfile:
         bedfile.write(text)
 
 
@@ -389,7 +390,7 @@ def write_logfile(read_data):
            f'Bamfile: {args.bam}\nOutput_folder: {args.output}\nRead threshold: {args.threshold}\n' \
            f'Insert size threshold: {args.high_insert_size}\nMinimal percentage: {args.minpercentage}'
 
-    with open(args.output + f'/{args.region}_flag_log.txt', 'w') as logfile:
+    with open(args.output + f'/{args.name}_log.txt', 'w') as logfile:
         logfile.write(text)
 
 
@@ -408,4 +409,4 @@ if __name__ == '__main__':
           f'Reads without matches: {read_data[2]}')
 
     if args.log:
-         write_logfile(read_data)  # write logfile with parameters
+        write_logfile(read_data)  # write logfile with parameters
