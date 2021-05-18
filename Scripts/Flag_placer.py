@@ -134,12 +134,15 @@ def flag_high_isize(read, flags, isbuildingflags, all_flags, chromosome, start):
     :return isbuildingflags: a list indicating which flags are currently being built.
     :return all_flags: A 2d list containing the coordinates of the flags and additional information.
     """
-    if read.isize > args.high_insert_size or read.isize < (args.high_insert_size * -1):
-        flags, isbuildingflags = generate_flag(read, flags, isbuildingflags, 1)
-        flags[1][3]['lengths'].append(read.isize)
+    insert_size = read.isize
+    if insert_size < 0:
+        insert_size = insert_size * -1
 
-    elif not (read.isize > args.high_insert_size or read.isize < (args.high_insert_size * -1)) and isbuildingflags[1]\
-            and start > flags[1][2]:
+    if insert_size > args.high_insert_size:
+        flags, isbuildingflags = generate_flag(read, flags, isbuildingflags, 1)
+        flags[1][3]['lengths'].append(insert_size)
+
+    elif not insert_size > args.high_insert_size and isbuildingflags[1] and start > flags[1][2]:
         percentage = round(flags[1][3]['count'] / flags[1][3]['total'], 2)
         if flags[1][3]['count'] > args.threshold and percentage > args.minpercentage:
             all_flags.append(flags[1])
@@ -226,16 +229,28 @@ def true_position(read):
     :return end: an integer idicating the true end of a read.
     """
     cigar = read.cigar
-    start = read.positions[0]
-    end = read.positions[-1]
-
-    if cigar[0][0] != 0:
-        start -= cigar[0][1]
-
-    if cigar[-1][0] != 0:
-        end += cigar[-1][1]
+    start = read.positions[0] - calculate_overshoot(cigar)
+    end = read.positions[-1] + calculate_overshoot(cigar.reverse())
 
     return start, end
+
+
+def calculate_overshoot(cigar):
+    """ The calculate overshoot function calculates the number of basepairs that have not been mapped but are part of
+    the read.
+
+    :param cigar: a list containing tuples representing the cigar string.
+    :return overshoot: an integer indicating the number of basepairs in the read before it is mapped.
+    """
+    overshoot = 0
+
+    for element in cigar:
+        if element[0] != 0:
+            overshoot += element[1]
+        else:
+            break
+
+    return overshoot
 
 
 def issameorientation(read):
