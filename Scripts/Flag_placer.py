@@ -61,11 +61,10 @@ def place_flags(reads):
     read_data = [0, 0, 0]
     chromosome = args.region.split(':')[0].replace('chr', '')
 
-    isbuildingflags = [False, False, False, False]
+    isbuildingflags = [False, False, False]
     flags = [[chromosome, None, None, {'type': 'same_orientation', 'count': 0, 'total': 0}],
              [chromosome, None, None, {'type': 'high_insert_size', 'count': 0, 'total': 0, 'lengths': []}],
-             [chromosome, None, None, {'type': 'unmapped_mate', 'count': 0, 'total': 0}],
-             [chromosome, None, None, {'type': 'softclips', 'count': 0, 'total': 0, 'bases': []}]]
+             [chromosome, None, None, {'type': 'unmapped_mate', 'count': 0, 'total': 0}]]
 
     for read in reads:
         if not read.is_unmapped and len(read.positions) != 0:
@@ -80,9 +79,7 @@ def place_flags(reads):
             # place flag if read has unmapped mate.
             flags, isbuildingflags, all_flags = flag_unmapped_mate(read, flags, isbuildingflags, all_flags, chromosome,
                                                                    start)
-            # place flag if read has sofclip bases.
-            flags, isbuildingflags, all_flags = flag_softclips(read, flags, isbuildingflags, all_flags, chromosome,
-                                                                   start)
+
             flags = update_total(flags, isbuildingflags)
 
         elif read.is_unmapped:
@@ -180,35 +177,6 @@ def flag_unmapped_mate(read, flags, isbuildingflags, all_flags, chromosome, star
     return flags, isbuildingflags, all_flags
 
 
-def flag_softclips(read, flags, isbuildingflags, all_flags, chromosome, start):
-    """ The flag_sofclips function checks if the current read should be added to the softclips flag or start creating a
-    softclips flag.
-
-    :param read: pysam object containing data of a read.
-    :param flags: a 2d list containing all the flag information.
-    :param isbuildingflags: a list indicating which flags are currently being built.
-    :param all_flags: A 2d list containing the coordinates of the flags and additional information.
-    :param chromosome: The chromosome where the read is mapped.
-    :param start: Integer indicating the starting position of the read.
-
-    :return flags: a 2d list containing all the flag information.
-    :return isbuildingflags: a list indicating which flags are currently being built.
-    :return all_flags: A 2d list containing the coordinates of the flags and additional information.
-    """
-    if has_softclips(read):
-        flags, isbuildingflags = generate_flag(read, flags, isbuildingflags, 3)
-        flags[3][3]['bases'].append(softclipbases(read))
-
-    elif not has_softclips(read) and isbuildingflags[3] and start > flags[3][2]:
-        percentage = round(flags[3][3]['count'] / flags[3][3]['total'], 3)
-        if flags[3][3]['count'] > args.threshold and percentage > args.minpercentage:
-            all_flags.append(flags[3])
-        flags[3] = [chromosome, None, None, {'type': 'softclips', 'count': 0, 'total': 0, 'bases': []}]
-        isbuildingflags[3] = False
-
-    return flags, isbuildingflags, all_flags
-
-
 def update_total(flags, isbuildingflags):
     """ The update_total function iterates over all the flag types and increments the total number of reads it has
     encountered by 1.
@@ -285,36 +253,6 @@ def issameorientation(read):
             return False
 
 
-def has_softclips(read):
-    """ The has_softclips function receives a read and returns true is the read contains softclips.
-
-    :param read: Pysam object containing data of a read.
-    :return bool: A boolean returning true if read contains softclips.
-    """
-    cigar = read.cigar
-    for element in cigar:
-        if element[0] == 4:
-            return True
-
-    return False
-
-
-def softclipbases(read):
-    """ The softclipbases function receives a read and returns the number of bases in the read that are softclips.
-
-    :param read: A Pysam object containing data of a read.
-    :return softclipbases: An integer representing the number of softclipbases in the read.
-    """
-    cigar = read.cigar
-    sofclipbases = 0
-
-    for element in cigar:
-        if element[0] == 4:
-            sofclipbases += element[1]
-
-    return sofclipbases
-
-
 def write_bedfile(flags):
     """ The write_bedfile function writes a file in BED format that can be loaded in igv and visualises the read data.
 
@@ -334,11 +272,6 @@ def write_bedfile(flags):
             description += f";Avg_insert_size={round(mean(lengths))};Med_insert_size={median(lengths)};" \
                            f"Lower_limit={min(lengths)};Upper_limit={max(lengths)}"
 
-        if flag[3]['type'] == 'softclips':
-            bases = flag[3]['bases']
-            description += f";Avg_sofclip_bases={round(mean(bases))};Med_sofclip_bases={median(bases)};" \
-                           f"Lower_limit={min(bases)};Upper_limit={max(bases)}"
-
         if flag[3]['type'] == 'same_orientation':
             rgb = f"0,192,199"
 
@@ -347,9 +280,6 @@ def write_bedfile(flags):
 
         elif flag[3]['type'] == 'unmapped_mate':
             rgb = f"218,52,144"
-
-        elif flag[3]['type'] == 'softclips':
-            rgb = f"71,226,111"
 
         text += f"{region}\t{description}\t0\t.\t{flag[1]}\t{flag[2]}\t{rgb}\n"
 
