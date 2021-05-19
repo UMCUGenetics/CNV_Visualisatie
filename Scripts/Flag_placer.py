@@ -228,7 +228,7 @@ def true_position(read):
     """
     cigar = read.cigar
     start = read.positions[0] - calculate_overshoot(cigar)
-    end = read.positions[-1] + calculate_overshoot(cigar.reverse())
+    end = read.positions[-1] + calculate_overshoot(cigar[::-1])
 
     return start, end
 
@@ -241,7 +241,6 @@ def calculate_overshoot(cigar):
     :return overshoot: an integer indicating the number of basepairs in the read before it is mapped.
     """
     overshoot = 0
-
     for element in cigar:
         if element[0] != 0:
             overshoot += element[1]
@@ -253,13 +252,13 @@ def calculate_overshoot(cigar):
 
 def issameorientation(read):
     """ The issameorientation function returns a bool returning true if a pair of reads have the same orientation and
-    false if they have an oposite orientation.
+    the mate is on the same chromosome. It will return false if this is not the case
 
     :param read: Pysam object containing data of a read.
     :return bool: A boolean returning True if the reads of a pair have the same orientation.
     """
     if read.is_paired and not read.mate_is_unmapped:
-        if read.is_reverse == read.mate_is_reverse:
+        if read.is_reverse == read.mate_is_reverse and read.reference_name == read.next_reference_name:
             return True
 
         else:
