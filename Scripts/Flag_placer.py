@@ -134,9 +134,7 @@ def flag_high_isize(read, flags, isbuildingflags, all_flags, chromosome, start):
     :return isbuildingflags: a list indicating which flags are currently being built.
     :return all_flags: A 2d list containing the coordinates of the flags and additional information.
     """
-    insert_size = read.isize
-    if insert_size < 0:
-        insert_size = insert_size * -1
+    insert_size = abs(read.isize)
 
     if insert_size > args.high_insert_size:
         flags, isbuildingflags = generate_flag(read, flags, isbuildingflags, 1)
