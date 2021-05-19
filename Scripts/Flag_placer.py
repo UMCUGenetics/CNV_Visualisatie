@@ -59,16 +59,16 @@ def place_flags(reads):
     """
     all_flags = []
     read_data = [0, 0, 0]
-    chromosome = args.region.split(':')[0].replace('chr', '')
 
     isbuildingflags = [False, False, False]
-    flags = [[chromosome, None, None, {'type': 'same_orientation', 'count': 0, 'total': 0}],
-             [chromosome, None, None, {'type': 'high_insert_size', 'count': 0, 'total': 0, 'lengths': []}],
-             [chromosome, None, None, {'type': 'unmapped_mate', 'count': 0, 'total': 0}]]
+    flags = [[None, None, None, {'type': 'same_orientation', 'count': 0, 'total': 0}],
+             [None, None, None, {'type': 'high_insert_size', 'count': 0, 'total': 0, 'lengths': []}],
+             [None, None, None, {'type': 'unmapped_mate', 'count': 0, 'total': 0}]]
 
     for read in reads:
         if not read.is_unmapped and len(read.positions) != 0:
             start, end = true_position(read)
+            chromosome = read.reference_name
             # place flag if read and its mate have the same orientation.
             flags, isbuildingflags, all_flags = flag_sameorientation(read, flags, isbuildingflags, all_flags,
                                                                      chromosome, start)
@@ -206,6 +206,7 @@ def generate_flag(read, flags, isbuildingflags, flagindex):
     start, end = true_position(read)
 
     if not isbuildingflags[flagindex]:
+        flags[flagindex][0] = read.reference_name
         flags[flagindex][1] = start
         flags[flagindex][2] = end
         isbuildingflags[flagindex] = True
