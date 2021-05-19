@@ -164,8 +164,8 @@ def write_bedgraph_file(heatmapdata):
 
     :param heatmapdata: A 2d list containing the coordinates and the percentage of sofclipped bases.
     """
-    text = 'track type=bedGraph name=Softclip_heatmap description="Softclip heatmap" color=255,155,155 ' \
-           'graphType=heatmap alwaysZero=off\n'
+    text = 'track type=bedGraph name=Softclip_graph description="Softclip graph" color=220,20,60 ' \
+           'graphType=bar alwaysZero=off\n'
     for datapoint in heatmapdata:
         text += f"{datapoint[0]}\t{datapoint[1]}\t{datapoint[2]}\t{datapoint[3]}\n"
 
@@ -185,7 +185,7 @@ def write_logfile(read_data):
            f'Reads without matches: {read_data[2]}\n{"-"*40}Parameters{"-"*40}\nRegion: {args.region}\n' \
            f'Bamfile: {args.bam}\nOutput_folder: {args.output}\n'
 
-    with open(args.output + f'/{args.name}_heatmap_log.txt', 'w') as logfile:
+    with open(args.output + f'/{args.name}_BedGraph_log.txt', 'w') as logfile:
         logfile.write(text)
 
 
