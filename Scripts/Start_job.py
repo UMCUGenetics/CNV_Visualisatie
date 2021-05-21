@@ -1,5 +1,6 @@
 import os
 import argparse
+import time
 from multiprocessing import Pool
 
 
@@ -27,6 +28,10 @@ args = parser.parse_args()
 
 
 def write_bedfile(chromosome):
+    """ The write_bedfile function runs the Flag_placer.py script for the given chromosome with the given arguments.
+
+    :param chromosome: Int or Str specifying the chromosome.
+    """
     os.system(f'python3 Flag_placer.py -b "{args.bam}"'
               f' -o "{args.output}"'
               f' -r "chr{chromosome}:0-0"'
@@ -35,17 +40,35 @@ def write_bedfile(chromosome):
               f' -n "{args.name}_{chromosome}"')
 
 
-def merge_bedfiles(chromosomes):
+def write_bedgraphfile(chromosome):
+    """ The write_bedgraphfile function runs the softclipp_graph.py script for the given chromosome with the given
+    arguments
+
+    :param chromosome: Int or Str specifying the chromosome.
+    """
+    os.system(f'python3 softclip_graph.py -b "{args.bam}"'
+              f' -o "{args.output}"'
+              f' -r "chr{chromosome}:0-0"'
+              f' -n "{args.name}_{chromosome}"')
+
+
+def merge_bedfiles(chromosomes, extension):
+    """ The merge_bedfiles function combines all the bedfiles or BedGraph files into one large file.
+
+    :param chromosomes: Int or Str specifying the chromosome.
+    :param extension: Str representing the file extension.
+    """
     bedfile_text = 'track name=Flags description="Flags regions of interest." db=hg19 gffTags=on itemRGB="On"\n'
 
     for chromosome in chromosomes:
-        with open(f"{args.output}/{args.name}_{chromosome}.bed", 'r') as bedfile:
+        with open(f"{args.output}/{args.name}_{chromosome}.{extension}", 'r') as bedfile:
             text = bedfile.readlines()[1:]
-            bedfile_text += text
+        for line in text:
+            bedfile_text += line
 
-        os.remove(f"{args.output}/{args.name}_{chromosome}.bed")
+        os.remove(f"{args.output}/{args.name}_{chromosome}.{extension}")
 
-    with open(f"{args.output}/{args.name}.bed", 'w') as output:
+    with open(f"{args.output}/{args.name}.{extension}", 'w') as output:
         output.write(bedfile_text)
 
 
@@ -53,10 +76,26 @@ def bedfile_handle(chromosomes):
     with Pool(args.cores) as p:
         p.map(write_bedfile, chromosomes)
 
-    merge_bedfiles(chromosomes)
+
+def bedgraph_handle(chromosomes):
+    with Pool(args.cores) as p:
+        p.map(write_bedgraphfile, chromosomes)
+
 
 if __name__ == '__main__':
+    start = time.time()
     chromosomes = list(range(1, 23)) + ['X', 'Y']
 
     bedfile_handle(chromosomes)
 
+    merge_bedfiles(chromosomes, 'bed')
+
+    bedgraph_handle(chromosomes)
+
+    merge_bedfiles(chromosomes, 'BedGraph')
+
+    end = time.time()
+
+    hours, rem = divmod(end-start, 3600)
+    minutes, seconds = divmod(rem, 60)
+    print(f"elapsed time: {hours}:{minutes}:{seconds}")
