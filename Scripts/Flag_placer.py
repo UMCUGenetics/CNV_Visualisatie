@@ -348,8 +348,5 @@ if __name__ == '__main__':
 
     write_bedfile(sorted_flags)  # write the result in a BED file.
 
-    #print(f'Process finished succesfully.\nTotal reads: {read_data[0]}\nUnmapped reads: {read_data[1]}\n'
-          #f'Reads without matches: {read_data[2]}')
-
     if args.log:
         write_logfile(read_data)  # write logfile with parameters

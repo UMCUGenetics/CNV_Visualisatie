@@ -15,9 +15,6 @@ parser.add_argument('--minpercentage', '-mp', required=False, default=0, type=fl
                                                                                           'threshold for the minimum'
                                                                                           'percentage of total reads in'
                                                                                           'region before flagged.')
-parser.add_argument('--region', '-r', required=False, default='', type=str, help='String specifying the region in '
-                                                                                 'format: "chr#:start-stop". use '
-                                                                                 'chr#:0-0 for whole chromosome.')
 parser.add_argument('--high_insert_size', '-hi', required=False, default=500, type=int,
                     help='Length of insert size to be classified as high.')
 parser.add_argument('--name', '-n', required=False, default='output', type=str, help='Name for the project. This is'
@@ -32,12 +29,13 @@ def write_bedfile(chromosome):
 
     :param chromosome: Int or Str specifying the chromosome.
     """
-    os.system(f'python3 Flag_placer.py -b "{args.bam}"'
-              f' -o "{args.output}"'
-              f' -r "chr{chromosome}:0-0"'
-              f' -t {args.threshold}'
-              f' -mp {args.minpercentage}'
-              f' -n "{args.name}_{chromosome}"')
+    if not os.path.exists(f"{args.output}/{args.name}_{chromosome}.bed"):
+        os.system(f'python3 Flag_placer.py -b "{args.bam}"'
+                  f' -o "{args.output}"'
+                  f' -r "chr{chromosome}:0-0"'
+                  f' -t {args.threshold}'
+                  f' -mp {args.minpercentage}'
+                  f' -n "{args.name}_{chromosome}"')
 
 
 def write_bedgraphfile(chromosome):
@@ -46,10 +44,11 @@ def write_bedgraphfile(chromosome):
 
     :param chromosome: Int or Str specifying the chromosome.
     """
-    os.system(f'python3 softclip_graph.py -b "{args.bam}"'
-              f' -o "{args.output}"'
-              f' -r "chr{chromosome}:0-0"'
-              f' -n "{args.name}_{chromosome}"')
+    if not os.path.exists(f"{args.output}/{args.name}_{chromosome}.BedGraph"):
+        os.system(f'python3 softclip_graph.py -b "{args.bam}"'
+                  f' -o "{args.output}"'
+                  f' -r "chr{chromosome}:0-0"'
+                  f' -n "{args.name}_{chromosome}"')
 
 
 def merge_bedfiles(chromosomes, extension):
@@ -61,6 +60,21 @@ def merge_bedfiles(chromosomes, extension):
     bedfile_text = 'track name=Flags description="Flags regions of interest." db=hg19 gffTags=on itemRGB="On"\n'
 
     for chromosome in chromosomes:
+        bedfile_text = update_text(bedfile_text, chromosome, extension)
+
+    with open(f"{args.output}/{args.name}.{extension}", 'w') as output:
+        output.write(bedfile_text)
+
+
+def update_text(bedfile_text, chromosome, extension):
+    """ The update text function receives the already merged bedfile_text and adds the content of the next bedfile to
+    the total bedfile_text.
+
+    :param bedfile_text: a string containing the content of the merged bedfile
+    :param chromosome: a string resembling a chromosome.
+    :param extension: a string resembling the file extension.
+    """
+    try:
         with open(f"{args.output}/{args.name}_{chromosome}.{extension}", 'r') as bedfile:
             text = bedfile.readlines()[1:]
         for line in text:
@@ -68,34 +82,46 @@ def merge_bedfiles(chromosomes, extension):
 
         os.remove(f"{args.output}/{args.name}_{chromosome}.{extension}")
 
-    with open(f"{args.output}/{args.name}.{extension}", 'w') as output:
-        output.write(bedfile_text)
+    except FileNotFoundError:
+        print(f"WARNING could not merge file: '{args.output}/{args.name}_{chromosome}.{extension}'")
+
+    return bedfile_text
 
 
 def bedfile_handle(chromosomes):
+    """ The bedfile_handle function divides the chromosomes over the number of cores to multiprocess the Flag_placer.py
+    script.
+
+    :param chromosomes: A list of all chromosomes.
+    """
     with Pool(args.cores) as p:
         p.map(write_bedfile, chromosomes)
 
 
 def bedgraph_handle(chromosomes):
+    """ The bedgraph_handle function divides the chromosomes over the number of cores to multiprocess the
+    softclip_graph.py script.
+
+    :param chromosomes: A list of all chromosomes.
+    """
     with Pool(args.cores) as p:
         p.map(write_bedgraphfile, chromosomes)
 
 
 if __name__ == '__main__':
-    start = time.time()
-    chromosomes = list(range(1, 23)) + ['X', 'Y']
+    start = time.time()  # Keep track of time.
+    chromosomes = list(range(1, 23)) + ['X', 'Y']  # create a list of all chromosomes.
 
-    bedfile_handle(chromosomes)
+    bedfile_handle(chromosomes)  # create bed files for each chromosome.
 
-    merge_bedfiles(chromosomes, 'bed')
+    merge_bedfiles(chromosomes, 'bed')  # merge bed files created by bedfile_handle.
 
-    bedgraph_handle(chromosomes)
+    bedgraph_handle(chromosomes)  # create BedGraph files for each chromosome.
 
-    merge_bedfiles(chromosomes, 'BedGraph')
+    merge_bedfiles(chromosomes, 'BedGraph')  # merge BedGraph files created by bedgraph_handle.
 
-    end = time.time()
+    end = time.time()  # stop tracking time
 
     hours, rem = divmod(end-start, 3600)
     minutes, seconds = divmod(rem, 60)
-    print(f"elapsed time: {hours}:{minutes}:{seconds}")
+    print(f"elapsed time: {round(hours)}:{round(minutes)}:{round(seconds)}")  # print elapsed time.
