@@ -159,6 +159,26 @@ def heatmapdata(sofclipdata):
     return heatmapdata
 
 
+def sort_flags(flags):
+    """ The sort_flags function sorts the flags on starting position using insertionsort.
+
+    :param flags: a 2d list containing all the flag information.
+    :return flags: a 2d list containing all the flag information.
+    """
+    for i in range(1, len(flags)):
+        key = flags[i][1]
+
+        j = i - 1
+        while j >= 0 and key < flags[j][1] and flags[i][0] == flags[j][0]:
+            temp = flags[j+1]
+            flags[j+1] = flags[j]
+            flags[j] = temp
+            j -= 1
+        flags[j + 1][1] = key
+
+    return flags
+
+
 def write_bedgraph_file(heatmapdata):
     """ The write_bedgraph_file function receives the heatmapdata and writes a BedGraph file.
 
@@ -193,7 +213,10 @@ if __name__ == '__main__':
     reads = fetch_reads()
 
     softclipdata, read_data = get_softclipdata(reads)
-    heatmapdata = heatmapdata(softclipdata)
+
+    graphdata = heatmapdata(softclipdata)
+
+    sorted_graphdata = sort_flags(graphdata)
 
     if args.log:
         write_logfile(read_data)
