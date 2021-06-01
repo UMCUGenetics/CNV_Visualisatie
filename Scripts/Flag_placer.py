@@ -9,19 +9,17 @@ parser.add_argument('--bam', '-b', required=True, type=str, help='Path to bam fi
 parser.add_argument('--output', '-o', required=False, type=str, help='Path to output folder.')
 parser.add_argument('--log', '-l', required=False, default=False, type=bool,
                     help='Bool specifying if logfile should be made.')
-parser.add_argument('--threshold', '-t', required=False, default=0, type=int, help='int specifying the minimun amount'
-                                                                                    'of reads before a flag is made')
-parser.add_argument('--minpercentage', '-mp', required=False, default=0, type=float, help='float specifying the'
-                                                                                          'threshold for the minimum'
-                                                                                          'percentage of total reads in'
-                                                                                          'region before flagged.')
-parser.add_argument('--region', '-r', required=False, default='', type=str, help='String specifying the region in '
-                                                                                 'format: "chr#:start-stop". use '
-                                                                                 'chr#:0-0 for whole chromosome.')
+parser.add_argument('--threshold', '-t', required=False, default=0, type=int,
+                    help='int specifying the minimun amount of reads before a flag is made')
+parser.add_argument('--minpercentage', '-mp', required=False, default=0, type=float,
+                    help='float specifying thethreshold for the minimum percentage of total reads in region before '
+                         'flagged.')
+parser.add_argument('--region', '-r', required=False, default='', type=str,
+                    help='String specifying the region in format: "chr#:start-stop". use chr#:0-0 for whole chromosome.')
 parser.add_argument('--high_insert_size', '-hi', required=False, default=500, type=int,
                     help='Length of insert size to be classified as high.')
-parser.add_argument('--name', '-n', required=False, default='output', type=str, help='Name for the project. This is'
-                                                                                         'the name of the output file.')
+parser.add_argument('--name', '-n', required=False, default='output', type=str,
+                    help='Name for the project. This is the name of the output file.')
 
 args = parser.parse_args()
 
