@@ -3,6 +3,7 @@ from datetime import datetime, date
 from statistics import mean, median
 import os
 import argparse
+import re
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--bam', '-b', required=True, type=str, help='Path to bam file.')
@@ -15,7 +16,7 @@ parser.add_argument('--minpercentage', '-mp', required=False, default=0, type=fl
                     help='float specifying thethreshold for the minimum percentage of total reads in region before '
                          'flagged.')
 parser.add_argument('--region', '-r', required=False, default='', type=str,
-                    help='String specifying the region in format: "chr#:start-stop". use chr#:0-0 for whole chromosome.')
+                    help='String specifying the region in format: "chr#:start-stop". use chr# for whole chromosome.')
 parser.add_argument('--high_insert_size', '-hi', required=False, default=500, type=int,
                     help='Length of insert size to be classified as high.')
 parser.add_argument('--name', '-n', required=False, default='output', type=str,
@@ -35,15 +36,15 @@ def fetch_reads():
         reads = bamfile.fetch()
 
     else:
-        chromosome = args.region.split(':')[0].replace('chr', '')
-        start = args.region.split(':')[1].split('-')[0]
-        end = args.region.split(':')[1].split('-')[1]
+        if ':' in args.region and '-' in args.region:
+            chromosome, start, end = re.split(':|-', args.region)
+            chromosome = chromosome.replace('chr', '')
 
-        if start == '0' and end == '0':
-            reads = bamfile.fetch(chromosome)
+            reads = bamfile.fetch(chromosome, int(start), int(end))
 
         else:
-            reads = bamfile.fetch(chromosome, int(start), int(end))
+            chromosome = args.region.replace('chr', '')
+            reads = bamfile.fetch(chromosome)
 
     return reads
 
@@ -54,9 +55,10 @@ def place_flags(reads):
 
     :param reads: Pysam object containing read information
     :return all_flags: A 2d list containing the coordinates of the flags and additional information.
+    :return read_data: A list with the number of total reads, unmapped reads and reads with 0 mapped positions.
     """
     all_flags = []
-    read_data = [0, 0, 0]
+    read_data = [0, 0, 0]  # [0] is number of reads. [1] is unmapped reads. [2] is reads with 0 mapped positions
 
     isbuildingflags = [False, False, False]
     flags = [[None, None, None, {'type': 'same_orientation', 'count': 0, 'total': 0}],
@@ -64,7 +66,7 @@ def place_flags(reads):
              [None, None, None, {'type': 'unmapped_mate', 'count': 0, 'total': 0}]]
 
     for read in reads:
-        if not read.is_unmapped and len(read.positions) != 0:
+        if not read.is_unmapped and read.positions:
             start, end = true_position(read)
             chromosome = read.reference_name
             # place flag if read and its mate have the same orientation.
@@ -107,7 +109,7 @@ def flag_sameorientation(read, flags, isbuildingflags, all_flags, chromosome, st
     if issameorientation(read):
         flags, isbuildingflags = generate_flag(read, flags, isbuildingflags, 0)
 
-    elif not issameorientation(read) and isbuildingflags[0] and start > flags[0][2]:
+    elif isbuildingflags[0] and start > flags[0][2]:
         percentage = round(flags[0][3]['count'] / flags[0][3]['total'], 2)
         if flags[0][3]['count'] > args.threshold and percentage > args.minpercentage:
             all_flags.append(flags[0])
@@ -181,6 +183,7 @@ def update_total(flags, isbuildingflags):
     encountered by 1.
 
     :param flags: a 2d list containing all the flag information.
+    :param isbuildingflags: a list indicating which flags are currently being built.
     return flags: a 2d list containing all the flag information.
     """
     for index in range(0, len(flags)):
@@ -241,7 +244,7 @@ def calculate_overshoot(cigar):
     """
     overshoot = 0
     for element in cigar:
-        if element[0] != 0:
+        if element[0]:
             overshoot += element[1]
         else:
             break
@@ -256,12 +259,11 @@ def issameorientation(read):
     :param read: Pysam object containing data of a read.
     :return bool: A boolean returning True if the reads of a pair have the same orientation.
     """
-    if read.is_paired and not read.mate_is_unmapped:
-        if read.is_reverse == read.mate_is_reverse and read.reference_name == read.next_reference_name:
-            return True
+    if (read.is_paired and not read.mate_is_unmapped and read.is_reverse == read.mate_is_reverse and
+        read.reference_name == read.next_reference_name):
+        return True
 
-        else:
-            return False
+    return False
 
 
 def write_bedfile(flags):
@@ -269,7 +271,8 @@ def write_bedfile(flags):
 
     :param flags: a 2d list containing all the flag information.
     """
-    text = 'track name=Flags description="Flags regions of interest." db=hg19 gffTags=on itemRGB="On"\n'
+    with open(args.output + f'/{args.name}.bed', 'w') as bedfile:
+        bedfile.write('track name=Flags description="Flags regions of interest." db=hg19 gffTags=on itemRGB="On"\n')
 
     for flag in flags:
         percentage = round(flag[3]['count'] / flag[3]['total'], 2)
@@ -292,10 +295,8 @@ def write_bedfile(flags):
         elif flag[3]['type'] == 'unmapped_mate':
             rgb = f"218,52,144"
 
-        text += f"{region}\t{description}\t0\t.\t{flag[1]}\t{flag[2]}\t{rgb}\n"
-
-    with open(args.output + f'/{args.name}.bed', 'w') as bedfile:
-        bedfile.write(text)
+        with open(args.output + f'/{args.name}.bed', 'a') as bedfile:
+            bedfile.write(f"{region}\t{description}\t0\t.\t{flag[1]}\t{flag[2]}\t{rgb}\n")
 
 
 def sort_flags(flags):

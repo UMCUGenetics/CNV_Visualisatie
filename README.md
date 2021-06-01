@@ -119,7 +119,7 @@ interest before it is marked as a region of interest. *Default: 0*
   
 
 - `--region` or `-r` followed by `chr#:(int):(int)`. Used to specify the region the script should analyze. Use `all` if 
-the script should place flags on the whole genome or use `chr#:0-0` if the script should place flags on a specific 
+the script should place flags on the whole genome or use `chr#:` if the script should place flags on a specific 
   chromosome. *Default: "all"*
   
 - `--high_insert_size` or `-hi` followed by `(any integer)`. Used to specify the threshold as what should be classified
@@ -148,7 +148,7 @@ The script can be called from the terminal using the following command:
   
 
 - `--region` or `-r` followed by `chr#:(int):(int)`. Used to specify the region the script should analyze. Use `all` if 
-the script should place flags on the whole genome or use `chr#:0-0` if the script should place flags on a specific 
+the script should place flags on the whole genome or use `chr#:` if the script should place flags on a specific 
   chromosome. *Default: "all"*
   
 

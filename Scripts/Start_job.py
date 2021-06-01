@@ -31,7 +31,7 @@ def write_bedfile(chromosome):
     if not os.path.exists(f"{args.output}/{args.name}_{chromosome}.bed"):
         os.system(f'python3 Flag_placer.py -b "{args.bam}"'
                   f' -o "{args.output}"'
-                  f' -r "chr{chromosome}:0-0"'
+                  f' -r "chr{chromosome}"'
                   f' -t {args.threshold}'
                   f' -mp {args.minpercentage}'
                   f' -n "{args.name}_{chromosome}"')
@@ -46,7 +46,7 @@ def write_bedgraphfile(chromosome):
     if not os.path.exists(f"{args.output}/{args.name}_{chromosome}.BedGraph"):
         os.system(f'python3 softclip_graph.py -b "{args.bam}"'
                   f' -o "{args.output}"'
-                  f' -r "chr{chromosome}:0-0"'
+                  f' -r "chr{chromosome}"'
                   f' -n "{args.name}_{chromosome}"')
 
 

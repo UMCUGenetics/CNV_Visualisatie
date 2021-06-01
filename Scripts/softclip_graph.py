@@ -2,6 +2,7 @@ from datetime import datetime, date
 import pysam
 import argparse
 import os
+import re
 
 
 parser = argparse.ArgumentParser()
@@ -10,7 +11,7 @@ parser.add_argument('--output', '-o', required=False, type=str, help='Path to ou
 parser.add_argument('--log', '-l', required=False, default=False, type=bool,
                     help='Bool specifying if logfile should be made.')
 parser.add_argument('--region', '-r', required=False, default='', type=str,
-                    help='String specifying the region in format: "chr#:start-stop". use chr#:0-0 for whole chromosome.')
+                    help='String specifying the region in format: "chr#:start-stop". use chr# for whole chromosome.')
 parser.add_argument('--name', '-n', required=False, default='output', type=str,
                     help='Name for the project. This is the name of the output file.')
 args = parser.parse_args()
@@ -27,15 +28,15 @@ def fetch_reads():
         reads = bamfile.fetch()
 
     else:
-        chromosome = args.region.split(':')[0].replace('chr', '')
-        start = args.region.split(':')[1].split('-')[0]
-        end = args.region.split(':')[1].split('-')[1]
+        if ':' in args.region and '-' in args.region:
+            chromosome, start, end = re.split(':|-', args.region)
+            chromosome = chromosome.replace('chr', '')
 
-        if start == '0' and end == '0':
-            reads = bamfile.fetch(chromosome)
+            reads = bamfile.fetch(chromosome, int(start), int(end))
 
         else:
-            reads = bamfile.fetch(chromosome, int(start), int(end))
+            chromosome = args.region.replace('chr', '')
+            reads = bamfile.fetch(chromosome)
 
     return reads
 
@@ -183,13 +184,13 @@ def write_bedgraph_file(heatmapdata):
 
     :param heatmapdata: A 2d list containing the coordinates and the percentage of sofclipped bases.
     """
-    text = 'track type=bedGraph name=Softclip_graph description="Softclip graph" color=220,20,60 ' \
-           'graphType=bar alwaysZero=off\n'
-    for datapoint in heatmapdata:
-        text += f"{datapoint[0]}\t{datapoint[1]}\t{datapoint[2]}\t{datapoint[3]}\n"
-
     with open(args.output + f'/{args.name}.BedGraph', 'w') as bedfile:
-        bedfile.write(text)
+        bedfile.write('track type=bedGraph name=Softclip_graph description="Softclip graph" color=220,20,60 '
+                      'graphType=bar alwaysZero=off\n')
+
+    for datapoint in heatmapdata:
+        with open(args.output + f'/{args.name}.BedGraph', 'a') as bedfile:
+            bedfile.write(f"{datapoint[0]}\t{datapoint[1]}\t{datapoint[2]}\t{datapoint[3]}\n")
 
 
 def write_logfile(read_data):
