@@ -57,9 +57,8 @@ def get_softclipdata(reads):
             read_start = true_start(read.cigar, read.positions[0])
             regions = softclip_regions(read_start, read.cigar)
 
-            if len(regions) != 0:
-                for region in regions:
-                    softclipdata = update_softclipdata(region, softclipdata)
+            for region in regions:
+                softclipdata = update_softclipdata(region, softclipdata)
 
         elif read.is_unmapped:
             read_data[1] += 1
