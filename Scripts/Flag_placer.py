@@ -17,8 +17,10 @@ parser.add_argument('--minpercentage', '-mp', required=False, default=0, type=fl
                          'flagged.')
 parser.add_argument('--region', '-r', required=False, default='', type=str,
                     help='String specifying the region in format: "chr#:start-stop". use chr# for whole chromosome.')
-parser.add_argument('--high_insert_size', '-hi', required=False, default=500, type=int,
+parser.add_argument('--high_insert_size', '-hi', required=False, default=600, type=int,
                     help='Length of insert size to be classified as high.')
+parser.add_argument('--ultra_high_insert_size', '-uhi', required=False, default=20000, type=int,
+                    help='Length of insert size to be classified as ultra high.')
 parser.add_argument('--name', '-n', required=False, default='output', type=str,
                     help='Name for the project. This is the name of the output file.')
 
@@ -60,10 +62,11 @@ def place_flags(reads):
     all_flags = []
     read_data = [0, 0, 0]  # [0] is number of reads. [1] is unmapped reads. [2] is reads with 0 mapped positions
 
-    isbuildingflags = [False, False, False]
+    isbuildingflags = [False, False, False, False]
     flags = [[None, None, None, {'type': 'same_orientation', 'count': 0, 'total': 0}],
              [None, None, None, {'type': 'high_insert_size', 'count': 0, 'total': 0, 'lengths': []}],
-             [None, None, None, {'type': 'unmapped_mate', 'count': 0, 'total': 0}]]
+             [None, None, None, {'type': 'unmapped_mate', 'count': 0, 'total': 0}],
+             [None, None, None, {'type': 'ultra_high_insert_size', 'count': 0, 'total': 0, 'lengths': []}]]
 
     for read in reads:
         if not read.is_unmapped and read.positions:
@@ -79,6 +82,10 @@ def place_flags(reads):
             # place flag if read has unmapped mate.
             flags, isbuildingflags, all_flags = flag_unmapped_mate(read, flags, isbuildingflags, all_flags, chromosome,
                                                                    start)
+
+            # place flag if read has ultra high insert size.
+            flags, isbuildingflags, all_flags = flag_ultra_high_isize(read, flags, isbuildingflags, all_flags,
+                                                                      chromosome,  start)
 
             flags = update_total(flags, isbuildingflags)
 
@@ -136,16 +143,47 @@ def flag_high_isize(read, flags, isbuildingflags, all_flags, chromosome, start):
     """
     insert_size = abs(read.isize)
 
-    if insert_size > args.high_insert_size:
+    if args.high_insert_size < insert_size < args.ultra_high_insert_size:
         flags, isbuildingflags = generate_flag(read, flags, isbuildingflags, 1)
         flags[1][3]['lengths'].append(insert_size)
 
-    elif not insert_size > args.high_insert_size and isbuildingflags[1] and start > flags[1][2]:
+    elif isbuildingflags[1] and start > flags[1][2]:
         percentage = round(flags[1][3]['count'] / flags[1][3]['total'], 2)
         if flags[1][3]['count'] > args.threshold and percentage > args.minpercentage:
             all_flags.append(flags[1])
         flags[1] = [chromosome, None, None, {'type': 'high_insert_size', 'count': 0, 'total': 0, 'lengths': []}]
         isbuildingflags[1] = False
+
+    return flags, isbuildingflags, all_flags
+
+
+def flag_ultra_high_isize(read, flags, isbuildingflags, all_flags, chromosome, start):
+    """ The flag_ultra_high_isize function checks if the current read should be added to a Ultra_high_insert_size flag
+    or start creating an ultra_high_isize_flag.
+
+    :param read: pysam object containing data of a read.
+    :param flags: a 2d list containing all the flag information.
+    :param isbuildingflags: a list indicating which flags are currently being built.
+    :param all_flags: A 2d list containing the coordinates of the flags and additional information.
+    :param chromosome: The chromosome where the read is mapped.
+    :param start: Integer indicating the starting position of the read.
+
+    :return flags: a 2d list containing all the flag information.
+    :return isbuildingflags: a list indicating which flags are currently being built.
+    :return all_flags: A 2d list containing the coordinates of the flags and additional information.
+    """
+    insert_size = abs(read.isize)
+
+    if insert_size > args.ultra_high_insert_size:
+        flags, isbuildingflags = generate_flag(read, flags, isbuildingflags, 3)
+        flags[3][3]['lengths'].append(insert_size)
+
+    elif isbuildingflags[3] and start > flags[3][2]:
+        percentage = round(flags[3][3]['count'] / flags[3][3]['total'], 2)
+        if flags[3][3]['count'] > args.threshold and percentage > args.minpercentage:
+            all_flags.append(flags[3])
+        flags[3] = [chromosome, None, None, {'type': 'ultra_high_insert_size', 'count': 0, 'total': 0, 'lengths': []}]
+        isbuildingflags[3] = False
 
     return flags, isbuildingflags, all_flags
 
@@ -168,7 +206,7 @@ def flag_unmapped_mate(read, flags, isbuildingflags, all_flags, chromosome, star
     if read.mate_is_unmapped:
         flags, isbuildingflags = generate_flag(read, flags, isbuildingflags, 2)
 
-    elif not read.mate_is_unmapped and isbuildingflags[2] and start > flags[2][2]:
+    elif isbuildingflags[2] and start > flags[2][2]:
         percentage = round(flags[2][3]['count'] / flags[2][3]['total'], 2)
         if flags[2][3]['count'] > args.threshold and percentage > args.minpercentage:
             all_flags.append(flags[2])
@@ -281,7 +319,7 @@ def write_bedfile(flags):
         description = f"Name={flag[3]['type']};Readcount={flag[3]['count']};Total_reads={flag[3]['total']};" \
                       f"Percentage={percentage}"
 
-        if flag[3]['type'] == 'high_insert_size':
+        if flag[3]['type'] == 'high_insert_size' or flag[3]['type'] == 'ultra_high_insert_size':
             lengths = flag[3]['lengths']
             description += f";Avg_insert_size={round(mean(lengths))};Med_insert_size={median(lengths)};" \
                            f"Lower_limit={min(lengths)};Upper_limit={max(lengths)}"
@@ -294,6 +332,9 @@ def write_bedfile(flags):
 
         elif flag[3]['type'] == 'unmapped_mate':
             rgb = f"218,52,144"
+
+        elif flag[3]['type'] == 'ultra_high_insert_size':
+            rgb = '71,226,111'
 
         with open(args.output + f'/{args.name}.bed', 'a') as bedfile:
             bedfile.write(f"{region}\t{description}\t0\t.\t{flag[1]}\t{flag[2]}\t{rgb}\n")
