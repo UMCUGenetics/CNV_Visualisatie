@@ -73,6 +73,7 @@ def get_bed_text(chromosome, extension):
     :param bedfile_text: a string containing the content of the merged bedfile
     :param chromosome: a string resembling a chromosome.
     :param extension: a string resembling the file extension.
+    :return bedfile_text: a string containing the text of the bed file.
     """
     bedfile_text = str
     try:
@@ -94,6 +95,7 @@ def bedfile_handle(chromosomes, extension):
     script.
 
     :param chromosomes: A list of all chromosomes.
+    :param extension: A string identifying the script that should be called.
     """
     if extension == 'flags':
         with Pool(args.cores) as p:
