@@ -60,6 +60,8 @@ def get_softclipdata(reads):
             for region in regions:
                 softclipdata = update_softclipdata(region, softclipdata)
 
+            softclipdata = remove_old(softclipdata, read_start)
+
         elif read.is_unmapped:
             read_data[1] += 1
         elif len(read.positions) == 0:
@@ -67,6 +69,25 @@ def get_softclipdata(reads):
         read_data[0] += 1
 
     return softclipdata, read_data
+
+
+def remove_old(softclip_data, read_start):
+    """ The remove old function removes the basepairs that do not have sofclips to save memory.
+
+    :param softclip_data: A dictionary with positions and the number of "normal" bases and softclip bases.
+    :param read_start: An integer representing the place where the read start.
+    :return sofclip_data: A dictionary with positions and the number of "normal" bases and softclip bases.
+    """
+    remove = []
+    for position in softclip_data:
+        if position < (read_start-151):
+            if softclip_data[position][1] == 0:
+                remove.append(position)
+
+    for position in remove:
+        softclip_data.pop(position, None)
+
+    return softclip_data
 
 
 def update_softclipdata(region, softclipdata):
@@ -132,7 +153,7 @@ def true_start(cigar, matchstart):
     return read_start
 
 
-def heatmapdata(sofclipdata):
+def get_heatmapdata(sofclipdata):
     """ The heatmapdata function receives the softclipdata and translates it to a more suitable format for a bedfile.
 
     :param sofclipdata: A dictionary with positions and the number of "normal" bases and softclip bases.
@@ -213,11 +234,11 @@ if __name__ == '__main__':
 
     softclipdata, read_data = get_softclipdata(reads)
 
-    graphdata = heatmapdata(softclipdata)
+    graphdata = get_heatmapdata(softclipdata)
 
     sorted_graphdata = sort_flags(graphdata)
 
     if args.log:
         write_logfile(read_data)
 
-    write_bedgraph_file(heatmapdata)
+    write_bedgraph_file(sorted_graphdata)
