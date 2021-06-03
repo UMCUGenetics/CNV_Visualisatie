@@ -75,7 +75,7 @@ def get_bed_text(chromosome, extension):
     :param extension: a string resembling the file extension.
     :return bedfile_text: a string containing the text of the bed file.
     """
-    bedfile_text = str
+    bedfile_text = ''
     try:
         with open(f"{args.output}/{args.name}_{chromosome}.{extension}", 'r') as bedfile:
             text = bedfile.readlines()[1:]
