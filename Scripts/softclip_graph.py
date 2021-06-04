@@ -69,7 +69,7 @@ def get_softclipdata(reads):
         elif len(read.positions) == 0:
             read_data[2] += 1
         read_data[0] += 1
-        
+
     softclipdata = {**softclipdata, **handle}
 
     return softclipdata, read_data
