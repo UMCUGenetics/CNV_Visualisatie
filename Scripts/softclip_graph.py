@@ -50,6 +50,7 @@ def get_softclipdata(reads):
     :read_data: a list containing the total number of reads and the reads it could not interpret.
     """
     softclipdata = {}
+    handle = {}
     read_data = [0, 0, 0]
 
     for read in reads:
@@ -58,20 +59,23 @@ def get_softclipdata(reads):
             regions = softclip_regions(read_start, read.cigar)
 
             for region in regions:
-                softclipdata = update_softclipdata(region, softclipdata)
+                handle = update_softclipdata(region, handle)
 
-            softclipdata = remove_old(softclipdata, read_start)
+            new_softclipdata, handle = remove_old(handle, read_start)
+            softclipdata = {**softclipdata, **new_softclipdata}
 
         elif read.is_unmapped:
             read_data[1] += 1
         elif len(read.positions) == 0:
             read_data[2] += 1
         read_data[0] += 1
+        
+    softclipdata = {**softclipdata, **handle}
 
     return softclipdata, read_data
 
 
-def remove_old(softclip_data, read_start):
+def remove_old(handle, read_start):
     """ The remove old function removes the basepairs that do not have sofclips to save memory.
 
     :param softclip_data: A dictionary with positions and the number of "normal" bases and softclip bases.
@@ -79,15 +83,22 @@ def remove_old(softclip_data, read_start):
     :return sofclip_data: A dictionary with positions and the number of "normal" bases and softclip bases.
     """
     remove = []
-    for position in softclip_data:
+    new_softclip_data = {}
+    for position in handle:
         if position < (read_start-151):
-            if softclip_data[position][1] == 0:
+            if handle[position][1] == 0:
+                remove.append(position)
+            else:
+                new_softclip_data.update({position: handle[position]})
                 remove.append(position)
 
-    for position in remove:
-        softclip_data.pop(position, None)
+        else:
+            break
 
-    return softclip_data
+    for position in remove:
+        handle.pop(position, None)
+
+    return new_softclip_data, handle
 
 
 def update_softclipdata(region, softclipdata):
