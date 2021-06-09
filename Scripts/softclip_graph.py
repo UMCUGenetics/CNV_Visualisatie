@@ -190,7 +190,7 @@ def write_bedgraph_file(graphdata):
     """
     with open(args.output + f'/{args.name}.BedGraph', 'w') as bedfile:
         bedfile.write('track type=bedGraph name=Softclip_graph description="Softclip graph" color=220,20,60 '
-                      'graphType=bar alwaysZero=off\n')
+                      'graphType=bar alwaysZero=off autoScale=on\n')
 
     with open(args.output + f'/{args.name}.BedGraph', 'a') as bedfile:
         for datapoint in graphdata:
