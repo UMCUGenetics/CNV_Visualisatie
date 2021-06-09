@@ -6,11 +6,11 @@ import re
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--bam', '-b', required=True, type=str, help='Path to bam file.')
+parser.add_argument('--region', '-r', required=True, type=str,
+                    help='String specifying the region in format: "chr#:start-stop". use chr# for whole chromosome.')
 parser.add_argument('--output', '-o', required=False, type=str, help='Path to output folder.')
 parser.add_argument('--log', '-l', required=False, default=False, type=bool,
                     help='Bool specifying if logfile should be made.')
-parser.add_argument('--region', '-r', required=False, default='', type=str,
-                    help='String specifying the region in format: "chr#:start-stop". use chr# for whole chromosome.')
 parser.add_argument('--name', '-n', required=False, default='output', type=str,
                     help='Name for the project. This is the name of the output file.')
 args = parser.parse_args()

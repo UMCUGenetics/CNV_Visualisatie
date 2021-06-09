@@ -8,7 +8,7 @@ import numpy as np
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--bam', '-b', required=True, type=str, help='Path to bam file.')
-parser.add_argument('--region', '-r', required=True, default='', type=str,
+parser.add_argument('--region', '-r', required=True, type=str,
                     help='String specifying the region in format: "chr#:start-stop". use chr# for whole chromosome.')
 parser.add_argument('--output', '-o', required=False, type=str, help='Path to output folder.')
 parser.add_argument('--log', '-l', required=False, default=False, type=bool,
