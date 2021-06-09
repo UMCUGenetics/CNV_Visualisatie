@@ -102,6 +102,8 @@ def place_flags(reads):
 
 
 def compute_insert_size_threshold():
+    """ The compute_insert_size_threshold computes the threshold of the high_insert_size flag if the user specified it.
+    """
     bamfile = pysam.AlignmentFile(args.bam, 'rb')
     reads = bamfile.fetch('2')
 
