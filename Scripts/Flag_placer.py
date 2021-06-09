@@ -8,6 +8,8 @@ import numpy as np
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--bam', '-b', required=True, type=str, help='Path to bam file.')
+parser.add_argument('--region', '-r', required=True, default='', type=str,
+                    help='String specifying the region in format: "chr#:start-stop". use chr# for whole chromosome.')
 parser.add_argument('--output', '-o', required=False, type=str, help='Path to output folder.')
 parser.add_argument('--log', '-l', required=False, default=False, type=bool,
                     help='Bool specifying if logfile should be made.')
@@ -16,8 +18,6 @@ parser.add_argument('--threshold', '-t', required=False, default=0, type=int,
 parser.add_argument('--minpercentage', '-mp', required=False, default=0, type=float,
                     help='float specifying thethreshold for the minimum percentage of total reads in region before '
                          'flagged.')
-parser.add_argument('--region', '-r', required=False, default='', type=str,
-                    help='String specifying the region in format: "chr#:start-stop". use chr# for whole chromosome.')
 parser.add_argument('--high_insert_size', '-hi', required=False, default=-1, type=int,
                     help='Length of insert size to be classified as high.')
 parser.add_argument('--ultra_high_insert_size', '-uhi', required=False, default=20000, type=int,
@@ -35,19 +35,15 @@ def fetch_reads():
     """
     bamfile = pysam.AlignmentFile(args.bam, 'rb')
 
-    if args.region == 'all':
-        reads = bamfile.fetch()
+    if ':' in args.region and '-' in args.region:
+        chromosome, start, end = re.split(':|-', args.region)
+        chromosome = chromosome.replace('chr', '')
+
+        reads = bamfile.fetch(chromosome, int(start), int(end))
 
     else:
-        if ':' in args.region and '-' in args.region:
-            chromosome, start, end = re.split(':|-', args.region)
-            chromosome = chromosome.replace('chr', '')
-
-            reads = bamfile.fetch(chromosome, int(start), int(end))
-
-        else:
-            chromosome = args.region.replace('chr', '')
-            reads = bamfile.fetch(chromosome)
+        chromosome = args.region.replace('chr', '')
+        reads = bamfile.fetch(chromosome)
 
     return reads
 
@@ -63,11 +59,12 @@ def place_flags(reads):
     all_flags = []
     read_data = [0, 0, 0]  # [0] is number of reads. [1] is unmapped reads. [2] is reads with 0 mapped positions
 
-    isbuildingflags = [False, False, False, False]
+    isbuildingflags = [False, False, False, False, False]
     flags = [[None, None, None, {'type': 'same_orientation', 'count': 0, 'total': 0}],
              [None, None, None, {'type': 'high_insert_size', 'count': 0, 'total': 0, 'lengths': []}],
              [None, None, None, {'type': 'unmapped_mate', 'count': 0, 'total': 0}],
-             [None, None, None, {'type': 'ultra_high_insert_size', 'count': 0, 'total': 0, 'lengths': []}]]
+             [None, None, None, {'type': 'ultra_high_insert_size', 'count': 0, 'total': 0, 'lengths': []}],
+             [None, None, None, {'type': 'inter_chromosomal_mate', 'count': 0, 'total': 0}]]
 
     compute_insert_size_threshold()
 
@@ -90,6 +87,10 @@ def place_flags(reads):
             flags, isbuildingflags, all_flags = flag_ultra_high_isize(read, flags, isbuildingflags, all_flags,
                                                                       chromosome,  start)
 
+            # place flag if the mate of the read is mapped to a different chromosome.
+            flags, isbuildingflags, all_flags = flag_interchromosomal_mate(read, flags, isbuildingflags, all_flags,
+                                                                     chromosome, start)
+
             flags = update_total(flags, isbuildingflags)
 
         elif read.is_unmapped:
@@ -105,7 +106,7 @@ def compute_insert_size_threshold():
     """ The compute_insert_size_threshold computes the threshold of the high_insert_size flag if the user specified it.
     """
     bamfile = pysam.AlignmentFile(args.bam, 'rb')
-    reads = bamfile.fetch('2')
+    reads = bamfile.fetch()
 
     insert_sizes = []
     max_reads = 10000
@@ -114,7 +115,7 @@ def compute_insert_size_threshold():
     global ultra_high_threshold
 
     for read in reads:
-        if not read.is_unmapped and read.positions and read.isize != 0:
+        if read.is_proper_pair:
             insert_sizes.append(abs(read.isize))
 
         if len(insert_sizes) == max_reads:
@@ -245,6 +246,34 @@ def flag_unmapped_mate(read, flags, isbuildingflags, all_flags, chromosome, star
     return flags, isbuildingflags, all_flags
 
 
+def flag_interchromosomal_mate(read, flags, isbuildingflags, all_flags, chromosome, start):
+    """ The flag_interchromosomal_mate function checks if the current read should be added to a inter_chromosomal_mate
+     flag or start creating a same_orientation flag.
+
+    :param read: pysam object containing data of a read.
+    :param flags: a 2d list containing all the flag information.
+    :param isbuildingflags: a list indicating which flags are currently being built.
+    :param all_flags: A 2d list containing the coordinates of the flags and additional information.
+    :param chromosome: The chromosome where the read is mapped.
+    :param start: Integer indicating the starting position of the read.
+
+    :return flags: a 2d list containing all the flag information.
+    :return isbuildingflags: a list indicating which flags are currently being built.
+    :return all_flags: A 2d list containing the coordinates of the flags and additional information.
+    """
+    if read.reference_name != read.next_reference_name:
+        flags, isbuildingflags = generate_flag(read, flags, isbuildingflags, 4)
+
+    elif isbuildingflags[4] and start > flags[4][2]:
+        percentage = round(flags[4][3]['count'] / flags[4][3]['total'], 2)
+        if flags[4][3]['count'] > args.threshold and percentage > args.minpercentage:
+            all_flags.append(flags[4])
+        flags[4] = [chromosome, None, None, {'type': 'inter_chromosomal_mate', 'count': 0, 'total': 0}]
+        isbuildingflags[4] = False
+
+    return flags, isbuildingflags, all_flags
+
+
 def update_total(flags, isbuildingflags):
     """ The update_total function iterates over all the flag types and increments the total number of reads it has
     encountered by 1.
@@ -357,6 +386,7 @@ def write_bedfile(flags):
             rgb = f"0,192,199"
 
         elif flag[3]['type'] == 'high_insert_size':
+            description += f";Threshold={high_threshold}bp"
             rgb = f"232,135,26"
 
         elif flag[3]['type'] == 'unmapped_mate':
@@ -364,6 +394,9 @@ def write_bedfile(flags):
 
         elif flag[3]['type'] == 'ultra_high_insert_size':
             rgb = '71,226,111'
+
+        elif flag[3]['type'] == 'inter_chromosomal_mate':
+            rgb = '87,61,219'
 
         with open(args.output + f'/{args.name}.bed', 'a') as bedfile:
             bedfile.write(f"{region}\t{description}\t0\t.\t{flag[1]}\t{flag[2]}\t{rgb}\n")
@@ -400,7 +433,8 @@ def write_logfile(read_data):
            f'{"-"*40}Read data{"-"*40}\nTotal reads: {read_data[0]}\nUnmapped reads: {read_data[1]}\n' \
            f'Reads without matches: {read_data[2]}\n{"-"*40}Parameters{"-"*40}\nRegion: {args.region}\n' \
            f'Bamfile: {args.bam}\nOutput_folder: {args.output}\nRead threshold: {args.threshold}\n' \
-           f'Insert size threshold: {args.high_insert_size}\nMinimal percentage: {args.minpercentage}'
+           f'Insert size threshold: {high_threshold}\nUltra high insert size threshold: {args.ultra_high_insert_size}' \
+           f'\nMinimal percentage: {args.minpercentage}'
 
     with open(args.output + f'/{args.name}_log.txt', 'w') as logfile:
         logfile.write(text)
