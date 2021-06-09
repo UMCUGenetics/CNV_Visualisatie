@@ -25,22 +25,17 @@ def fetch_reads():
     global bamfile
     bamfile = pysam.AlignmentFile(args.bam, 'rb')
 
-    if args.region == 'all':
-        reads = bamfile.fetch()
-        pileup = bamfile.pileup()
+    if ':' in args.region and '-' in args.region:
+        chromosome, start, end = re.split(':|-', args.region)
+        chromosome = chromosome.replace('chr', '')
+
+        reads = bamfile.fetch(chromosome, int(start), int(end))
+        pileup = bamfile.pileup(chromosome, int(start), int(end))
 
     else:
-        if ':' in args.region and '-' in args.region:
-            chromosome, start, end = re.split(':|-', args.region)
-            chromosome = chromosome.replace('chr', '')
-
-            reads = bamfile.fetch(chromosome, int(start), int(end))
-            pileup = bamfile.pileup(chromosome, int(start), int(end))
-
-        else:
-            chromosome = args.region.replace('chr', '')
-            reads = bamfile.fetch(chromosome)
-            pileup = bamfile.pileup(chromosome)
+        chromosome = args.region.replace('chr', '')
+        reads = bamfile.fetch(chromosome)
+        pileup = bamfile.pileup(chromosome)
 
     return reads, pileup
 
