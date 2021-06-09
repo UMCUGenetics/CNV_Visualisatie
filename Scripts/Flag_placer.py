@@ -4,6 +4,7 @@ from statistics import mean, median
 import os
 import argparse
 import re
+import numpy as np
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--bam', '-b', required=True, type=str, help='Path to bam file.')
@@ -17,7 +18,7 @@ parser.add_argument('--minpercentage', '-mp', required=False, default=0, type=fl
                          'flagged.')
 parser.add_argument('--region', '-r', required=False, default='', type=str,
                     help='String specifying the region in format: "chr#:start-stop". use chr# for whole chromosome.')
-parser.add_argument('--high_insert_size', '-hi', required=False, default=600, type=int,
+parser.add_argument('--high_insert_size', '-hi', required=False, default=-1, type=int,
                     help='Length of insert size to be classified as high.')
 parser.add_argument('--ultra_high_insert_size', '-uhi', required=False, default=20000, type=int,
                     help='Length of insert size to be classified as ultra high.')
@@ -68,6 +69,8 @@ def place_flags(reads):
              [None, None, None, {'type': 'unmapped_mate', 'count': 0, 'total': 0}],
              [None, None, None, {'type': 'ultra_high_insert_size', 'count': 0, 'total': 0, 'lengths': []}]]
 
+    compute_insert_size_threshold()
+
     for read in reads:
         if not read.is_unmapped and read.positions:
             start, end = true_position(read)
@@ -96,6 +99,30 @@ def place_flags(reads):
         read_data[0] += 1
 
     return all_flags, read_data
+
+
+def compute_insert_size_threshold():
+    bamfile = pysam.AlignmentFile(args.bam, 'rb')
+    reads = bamfile.fetch('2')
+
+    insert_sizes = []
+    max_reads = 10000
+
+    global high_threshold
+    global ultra_high_threshold
+
+    for read in reads:
+        if not read.is_unmapped and read.positions and read.isize != 0:
+            insert_sizes.append(abs(read.isize))
+
+        if len(insert_sizes) == max_reads:
+            break
+
+    insert_sizes = np.array(insert_sizes)
+    if args.high_insert_size == -1:
+        high_threshold = int(np.percentile(insert_sizes, 99.5))
+    else:
+        high_threshold = args.high_insert_size
 
 
 def flag_sameorientation(read, flags, isbuildingflags, all_flags, chromosome, start):
@@ -143,7 +170,7 @@ def flag_high_isize(read, flags, isbuildingflags, all_flags, chromosome, start):
     """
     insert_size = abs(read.isize)
 
-    if args.high_insert_size < insert_size < args.ultra_high_insert_size:
+    if high_threshold < insert_size:
         flags, isbuildingflags = generate_flag(read, flags, isbuildingflags, 1)
         flags[1][3]['lengths'].append(insert_size)
 
