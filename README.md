@@ -98,6 +98,10 @@ The script can be called from the terminal using the following command:
 #### required arguments
 - `--bam` or `-b` followed by `path/to/bamfile.bam`. Used to specify the location of the bam file.
 
+
+- `--region` or `-r` followed by `chr#:(int):(int)`. Used to specify the region the script should analyze oruse `chr#:` 
+  if the script should place flags on a specific chromosome.
+
 #### optional arguments
 - `--output` or `-o` followed by `path/to/output_folder`. Used to specify the folder where the output files should be stored.
 *Default: same folder as Flag_placer.py*.
@@ -117,10 +121,6 @@ before it is flagged. *Default: 0*.
 - `--minpercentage` or `-mp` followed by `(any float)`. Used to specify the minimum percentage of reads in a region of
 interest before it is marked as a region of interest. *Default: 0*
   
-
-- `--region` or `-r` followed by `chr#:(int):(int)`. Used to specify the region the script should analyze. Use `all` if 
-the script should place flags on the whole genome or use `chr#:` if the script should place flags on a specific 
-  chromosome. *Default: "all"*
   
 - `--high_insert_size` or `-hi` followed by `(any integer)`. Used to specify the threshold as what should be classified
 as remarkably high insert size. *Default: 500*.
@@ -135,6 +135,10 @@ The script can be called from the terminal using the following command:
 #### required arguments
 - `--bam` or `-b` followed by `path/to/bamfile.bam`. Used to specify the location of the bam file.
 
+
+- `--region` or `-r` followed by `chr#:(int):(int)`. Used to specify the region the script should analyze oruse `chr#:` 
+  if the script should place flags on a specific chromosome.
+
 #### optional arguments
 - `--output` or `-o` followed by `path/to/output_folder`. Used to specify the folder where the output files should be stored.
 *Default: same folder as softclip_graph.py*.
@@ -145,10 +149,4 @@ The script can be called from the terminal using the following command:
 
 - `--log` or `-l` followed by `True` or `False`. Used to specify if log file should be written in output folder. 
 *Default: True*.
-  
-
-- `--region` or `-r` followed by `chr#:(int):(int)`. Used to specify the region the script should analyze. Use `all` if 
-the script should place flags on the whole genome or use `chr#:` if the script should place flags on a specific 
-  chromosome. *Default: "all"*
-  
 
