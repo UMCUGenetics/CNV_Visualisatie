@@ -59,12 +59,13 @@ def place_flags(reads):
     all_flags = []
     read_data = [0, 0, 0]  # [0] is number of reads. [1] is unmapped reads. [2] is reads with 0 mapped positions
 
-    isbuildingflags = [False, False, False, False, False]
+    isbuildingflags = [False, False, False, False, False, False]
     flags = [[None, None, None, {'type': 'same_orientation', 'count': 0, 'total': 0}],
              [None, None, None, {'type': 'high_insert_size', 'count': 0, 'total': 0, 'lengths': []}],
              [None, None, None, {'type': 'unmapped_mate', 'count': 0, 'total': 0}],
              [None, None, None, {'type': 'ultra_high_insert_size', 'count': 0, 'total': 0, 'lengths': []}],
-             [None, None, None, {'type': 'inter_chromosomal_mate', 'count': 0, 'total': 0}]]
+             [None, None, None, {'type': 'inter_chromosomal_pair', 'count': 0, 'total': 0}],
+             [None, None, None, {'type': 'face_away', 'count': 0, 'total': 0}]]
 
     compute_insert_size_threshold()
 
@@ -90,6 +91,10 @@ def place_flags(reads):
             # place flag if the mate of the read is mapped to a different chromosome.
             flags, isbuildingflags, all_flags = flag_interchromosomal_mate(read, flags, isbuildingflags, all_flags,
                                                                      chromosome, start)
+
+            # place flag if the read and its mate face away from each other
+            flags, isbuildingflags, all_flags = flag_facaway(read, flags, isbuildingflags, all_flags,
+                                                                           chromosome, start)
 
             flags = update_total(flags, isbuildingflags)
 
@@ -248,7 +253,7 @@ def flag_unmapped_mate(read, flags, isbuildingflags, all_flags, chromosome, star
 
 def flag_interchromosomal_mate(read, flags, isbuildingflags, all_flags, chromosome, start):
     """ The flag_interchromosomal_mate function checks if the current read should be added to a inter_chromosomal_mate
-     flag or start creating a same_orientation flag.
+     flag or start creating a inter_chromosomal flag.
 
     :param read: pysam object containing data of a read.
     :param flags: a 2d list containing all the flag information.
@@ -268,8 +273,36 @@ def flag_interchromosomal_mate(read, flags, isbuildingflags, all_flags, chromoso
         percentage = round(flags[4][3]['count'] / flags[4][3]['total'], 2)
         if flags[4][3]['count'] > args.threshold and percentage > args.minpercentage:
             all_flags.append(flags[4])
-        flags[4] = [chromosome, None, None, {'type': 'inter_chromosomal_mate', 'count': 0, 'total': 0}]
+        flags[4] = [chromosome, None, None, {'type': 'inter_chromosomal_pair', 'count': 0, 'total': 0}]
         isbuildingflags[4] = False
+
+    return flags, isbuildingflags, all_flags
+
+
+def flag_facaway(read, flags, isbuildingflags, all_flags, chromosome, start):
+    """ The flag_facaway function checks if the current read should be added to a face_away flag or start creating a
+    face_away flag.
+
+    :param read: pysam object containing data of a read.
+    :param flags: a 2d list containing all the flag information.
+    :param isbuildingflags: a list indicating which flags are currently being built.
+    :param all_flags: A 2d list containing the coordinates of the flags and additional information.
+    :param chromosome: The chromosome where the read is mapped.
+    :param start: Integer indicating the starting position of the read.
+
+    :return flags: a 2d list containing all the flag information.
+    :return isbuildingflags: a list indicating which flags are currently being built.
+    :return all_flags: A 2d list containing the coordinates of the flags and additional information.
+    """
+    if is_facaway(read):
+        flags, isbuildingflags = generate_flag(read, flags, isbuildingflags, 5)
+
+    elif isbuildingflags[5] and start > flags[5][2]:
+        percentage = round(flags[5][3]['count'] / flags[5][3]['total'], 2)
+        if flags[5][3]['count'] > args.threshold and percentage > args.minpercentage:
+            all_flags.append(flags[5])
+        flags[5] = [chromosome, None, None, {'type': 'face_away', 'count': 0, 'total': 0}]
+        isbuildingflags[5] = False
 
     return flags, isbuildingflags, all_flags
 
@@ -362,6 +395,24 @@ def issameorientation(read):
     return False
 
 
+def is_facaway(read):
+    """ The is_facaway function receives a read and returns true if the read and its paired mate face away from each
+    other.
+
+    :param read: Pysam object containing data of a read.
+    :return bool: A boolean returning True if the read and its mate face away from each other.
+    """
+    if not issameorientation(read):
+        if not read.is_reverse:
+            if read.template_length < 0:
+                return True
+        else:
+            if read.template_length > 0:
+                return True
+
+    return False
+
+
 def write_bedfile(flags):
     """ The write_bedfile function writes a file in BED format that can be loaded in igv and visualises the read data.
 
@@ -395,8 +446,11 @@ def write_bedfile(flags):
         elif flag[3]['type'] == 'ultra_high_insert_size':
             rgb = '71,226,111'
 
-        elif flag[3]['type'] == 'inter_chromosomal_mate':
+        elif flag[3]['type'] == 'inter_chromosomal_pair':
             rgb = '87,61,219'
+
+        elif flag[3]['type'] == 'face_away':
+            rgb = '147,133,255'
 
         with open(args.output + f'/{args.name}.bed', 'a') as bedfile:
             bedfile.write(f"{region}\t{description}\t0\t.\t{flag[1]}\t{flag[2]}\t{rgb}\n")
