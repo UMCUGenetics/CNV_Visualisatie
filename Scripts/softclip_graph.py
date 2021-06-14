@@ -170,7 +170,7 @@ def to_graphdata(softclipdata):
     compressed_graphdata = [graphdata[0]]
 
     for row in graphdata[1:]:
-        if row[3] == compressed_graphdata[-1][3] and (row[2] + 1) == compressed_graphdata[-1][3]:
+        if row[3] == compressed_graphdata[-1][3] and row[2] == compressed_graphdata[-1][2] + 1:
             compressed_graphdata[-1][2] = row[2]
         else:
             compressed_graphdata.append(row)
@@ -215,9 +215,9 @@ if __name__ == '__main__':
 
     softclipdata = add_coverage(softclipdata, pileup)  # add coverage to softclipdata to calculate ratio
 
-    graphdata = to_graphdata(softclipdata)  # change datastructure of softclipdata
+    compressed_graphdata = to_graphdata(softclipdata)  # change datastructure of softclipdata
 
-    write_bedgraph_file(graphdata)  # write to BedGraph formatted file
+    write_bedgraph_file(compressed_graphdata)  # write to BedGraph formatted file
 
     if args.log:
         write_logfile(read_data)  # write logfile
