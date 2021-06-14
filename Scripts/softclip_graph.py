@@ -173,6 +173,7 @@ def to_graphdata(softclipdata):
         if row[3] == compressed_graphdata[-1][3] and row[2] == compressed_graphdata[-1][2] + 1:
             compressed_graphdata[-1][2] = row[2]
         else:
+            compressed_graphdata[-1][2] += 1
             compressed_graphdata.append(row)
 
     return compressed_graphdata
