@@ -14,8 +14,10 @@ parser.add_argument('--threshold', '-t', required=False, default=0, type=int,
 parser.add_argument('--minpercentage', '-mp', required=False, default=0, type=float,
                     help='float specifying the threshold for the minimum percentage of total reads in region before '
                          'flagged.')
-parser.add_argument('--high_insert_size', '-hi', required=False, default=500, type=int,
+parser.add_argument('--high_insert_size', '-hi', required=False, default=-1, type=int,
                     help='Length of insert size to be classified as high.')
+parser.add_argument('--ultra_high_insert_size', '-uhi', required=False, default=20000, type=int,
+                    help='Length of insert size to be classified as ultra high.')
 parser.add_argument('--name', '-n', required=False, default='output', type=str,
                     help='Name for the project. This is the name of the output file.')
 parser.add_argument('--cores', '-c', required=False, default=1, type=int, help='Number of cores that should be used.')
@@ -34,7 +36,8 @@ def write_bedfile(chromosome):
                   f' -r "chr{chromosome}"'
                   f' -t {args.threshold}'
                   f' -mp {args.minpercentage}'
-                  f' -n "{args.name}_{chromosome}"')
+                  f' -n "{args.name}_{chromosome}"'
+                  f' -uhi {args.ultra_high_insert_size}')
 
 
 def write_bedgraphfile(chromosome):
