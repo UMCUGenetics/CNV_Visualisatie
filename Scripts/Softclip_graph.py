@@ -207,7 +207,8 @@ def write_logfile(read_data):
     text = f'Logfile created by: {current_path}/softclip_graph.py\nScript finished at: {current_time} {current_day}\n' \
            f'{"-" * 40}Read data{"-" * 40}\nTotal reads: {read_data[0]}\nUnmapped reads: {read_data[1]}\n' \
            f'Reads without matches: {read_data[2]}\n{"-" * 40}Parameters{"-" * 40}\nRegion: {args.region}\n' \
-           f'Bamfile: {args.bam}\nOutput_folder: {args.output}\n'
+           f'Bamfile: {args.bam}\nOutput_folder: {args.output}\n{"-"*40}Settings{"-"*40}\nMinCov=' \
+           f'{settings["MinCoverage"]}'
 
     with open(args.output + f'/{args.name}_BedGraph_log.txt', 'w') as logfile:
         logfile.write(text)
