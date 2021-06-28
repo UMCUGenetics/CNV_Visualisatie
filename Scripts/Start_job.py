@@ -136,6 +136,7 @@ def get_log_data(chromosomes):
 
         return total_reads, total_unmapped, total_reads_without_matches
 
+
 def merge_logfiles(chromosomes):
     total_reads, total_unmapped, total_reads_without_matches = get_log_data(chromosomes)
 
@@ -146,10 +147,11 @@ def merge_logfiles(chromosomes):
 
     text = f'Logfile created by: {current_path}/Start_job.py\nScript finished at: {current_time} {current_day}\n' \
            f'{"-" * 40}Read data{"-" * 40}\nTotal reads: {total_reads}\nUnmapped reads: {total_unmapped}\n' \
-           f'Reads without matches: {total_reads_without_matches}\n{"-" * 40}Parameters{"-" * 40}\nRegion: {args.region}\n' \
-           f'Bamfile: {args.bam}\nOutput_folder: {args.output}\n{"-" * 40}Settings{"-" * 40}\nhigh_insert_size=' \
-           f'{settings["high_insert_size"]}\nultra_high_insert_size={settings["ultra_high_insert_size"]}\n' \
-           f'MinPercentage_same_orientation={settings["MinPercentage_same_orientation"]}\nMinPercentage_high_insert_size=' \
+           f'Reads without matches: {total_reads_without_matches}\n{"-" * 40}Parameters{"-" * 40}\nRegion: {args.region}' \
+           f'\nBamfile: {args.bam}\nOutput_folder: {args.output}\nCores: {args.cores}\n{"-" * 40}Settings{"-" * 40}' \
+           f'\nhigh_insert_size={settings["high_insert_size"]}\nultra_high_insert_size=' \
+           f'{settings["ultra_high_insert_size"]}\nMinPercentage_same_orientation=' \
+           f'{settings["MinPercentage_same_orientation"]}\nMinPercentage_high_insert_size=' \
            f'{settings["MinPercentage_high_insert_size"]}\nMinPercentage_unmapped_mate=' \
            f'{settings["MinPercentage_unmapped_mate"]}\nMinPercentage_ultra_high_insert_size=' \
            f'{settings["MinPercentage_ultra_high_insert_size"]}\nMinPercentage_inter_chromosomal_pair=' \
