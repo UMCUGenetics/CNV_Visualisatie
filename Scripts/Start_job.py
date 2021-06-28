@@ -1,6 +1,7 @@
 import os
 import argparse
 import time
+from datetime import datetime, date
 from multiprocessing import Pool
 
 
@@ -14,6 +15,23 @@ parser.add_argument('--cores', '-c', required=False, default=1, type=int, help='
 args = parser.parse_args()
 
 
+def read_settings():
+    """ The read_settings function reads the settings file and creates a global dictionary containing all the settings.
+    """
+    global settings
+    settings = {}
+
+    with open('../Settings.txt', 'r') as file:
+        text = file.readlines()
+
+    for row in text:
+        if not row.startswith('#'):
+            if row != '\n':
+                row.replace('\n', '')
+                splitrow = row.replace('\n', '').split('=')
+                settings.update({splitrow[0]: splitrow[1]})
+
+
 def write_bedfile(chromosome):
     """ The write_bedfile function runs the Flag_placer.py script for the given chromosome with the given arguments.
 
@@ -23,7 +41,7 @@ def write_bedfile(chromosome):
         os.system(f'python3 Flag_placer.py -b "{args.bam}"'
                   f' -o "{args.output}"'
                   f' -r "chr{chromosome}"'
-                  f' -n "{args.name}_{chromosome}"')
+                  f' -n "{args.name}_flags_{chromosome}"')
 
 
 def write_bedgraphfile(chromosome):
@@ -36,7 +54,7 @@ def write_bedgraphfile(chromosome):
         os.system(f'python3 softclip_graph.py -b "{args.bam}"'
                   f' -o "{args.output}"'
                   f' -r "chr{chromosome}"'
-                  f' -n "{args.name}_{chromosome}"')
+                  f' -n "{args.name}_softclip_{chromosome}"')
 
 
 def merge_bedfiles(chromosomes, extension):
@@ -65,16 +83,21 @@ def get_bed_text(chromosome, extension):
     :return bedfile_text: a string containing the text of the bed file.
     """
     bedfile_text = ''
+    if extension == 'bed':
+        type = 'flags'
+    else:
+        type = 'softclip'
+
     try:
-        with open(f"{args.output}/{args.name}_{chromosome}.{extension}", 'r') as bedfile:
+        with open(f"{args.output}/{args.name}_{type}_{chromosome}.{extension}", 'r') as bedfile:
             text = bedfile.readlines()[1:]
         for line in text:
             bedfile_text += line
 
-        os.remove(f"{args.output}/{args.name}_{chromosome}.{extension}")
+        os.remove(f"{args.output}/{args.name}_{type}_{chromosome}.{extension}")
 
     except FileNotFoundError:
-        print(f"WARNING could not merge file: '{args.output}/{args.name}_{chromosome}.{extension}'")
+        print(f"WARNING could not merge file: '{args.output}/{args.name}_{type}_{chromosome}.{extension}'")
 
     return bedfile_text
 
@@ -95,6 +118,54 @@ def bedfile_handle(chromosomes, extension):
             p.map(write_bedgraphfile, chromosomes)
 
 
+def get_log_data(chromosomes):
+    total_reads = 0
+    total_unmapped = 0
+    total_reads_without_matches = 0
+
+    for chromosome in chromosomes:
+        with open(f"{args.output}/{args.name}_flags_{chromosome}_log.txt", 'r') as bedfile:
+            text = bedfile.readlines()
+
+        total_reads += int(text[3].split(': ')[1])
+        total_unmapped += int(text[4].split(': ')[1])
+        total_reads_without_matches += int(text[5].split(': ')[1])
+
+        os.remove(f"{args.output}/{args.name}_flags_{chromosome}_log.txt")
+        os.remove(f"{args.output}/{args.name}_softclip_{chromosome}_log.txt")
+
+        return total_reads, total_unmapped, total_reads_without_matches
+
+def merge_logfiles(chromosomes):
+    total_reads, total_unmapped, total_reads_without_matches = get_log_data(chromosomes)
+
+    current_path = os.getcwd()
+
+    current_time = datetime.now().strftime("%H:%M:%S")
+    current_day = date.today().strftime("%d/%m/%Y")
+
+    text = f'Logfile created by: {current_path}/Start_job.py\nScript finished at: {current_time} {current_day}\n' \
+           f'{"-" * 40}Read data{"-" * 40}\nTotal reads: {total_reads}\nUnmapped reads: {total_unmapped}\n' \
+           f'Reads without matches: {total_reads_without_matches}\n{"-" * 40}Parameters{"-" * 40}\nRegion: {args.region}\n' \
+           f'Bamfile: {args.bam}\nOutput_folder: {args.output}\n{"-" * 40}Settings{"-" * 40}\nhigh_insert_size=' \
+           f'{settings["high_insert_size"]}\nultra_high_insert_size={settings["ultra_high_insert_size"]}\n' \
+           f'MinPercentage_same_orientation={settings["MinPercentage_same_orientation"]}\nMinPercentage_high_insert_size=' \
+           f'{settings["MinPercentage_high_insert_size"]}\nMinPercentage_unmapped_mate=' \
+           f'{settings["MinPercentage_unmapped_mate"]}\nMinPercentage_ultra_high_insert_size=' \
+           f'{settings["MinPercentage_ultra_high_insert_size"]}\nMinPercentage_inter_chromosomal_pair=' \
+           f'{settings["MinPercentage_inter_chromosomal_pair"]}\nMinPercentage_face_away=' \
+           f'{settings["MinPercentage_face_away"]}\nMinReadCount_same_orientation=' \
+           f'{settings["MinReadCount_same_orientation"]}\nMinReadCount_high_insert_size=' \
+           f'{settings["MinReadCount_high_insert_size"]}\nMinReadCount_unmapped_mate=' \
+           f'{settings["MinReadCount_unmapped_mate"]}\nMinReadCount_ultra_high_insert_size=' \
+           f'{settings["MinReadCount_ultra_high_insert_size"]}\nMinReadCount_inter_chromosomal_pair=' \
+           f'{settings["MinReadCount_inter_chromosomal_pair"]}\nMinReadCount_face_away=' \
+           f'{settings["MinReadCount_face_away"]}\nMinCoverage={settings["MinCoverage"]}\n'
+
+    with open(args.output + f'/{args.name}_log.txt', 'w') as logfile:
+        logfile.write(text)
+
+
 if __name__ == '__main__':
     start = time.time()  # Keep track of time.
     chromosomes = list(range(1, 23)) + ['X', 'Y']  # create a list of all chromosomes.
@@ -106,6 +177,9 @@ if __name__ == '__main__':
     bedfile_handle(chromosomes, 'softclips')  # create BedGraph files for each chromosome.
 
     merge_bedfiles(chromosomes, 'BedGraph')  # merge BedGraph files created by bedgraph_handle.
+
+    if settings['log'] == 'True':
+        merge_logfiles(chromosomes)
 
     end = time.time()  # stop tracking time
 
