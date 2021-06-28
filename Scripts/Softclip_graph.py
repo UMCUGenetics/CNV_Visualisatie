@@ -16,6 +16,23 @@ parser.add_argument('--name', '-n', required=False, default='output', type=str,
 args = parser.parse_args()
 
 
+def read_settings():
+    """ The read_settings function reads the settings file and creates a global dictionary containing all the settings.
+    """
+    global settings
+    settings = {}
+
+    with open('../Settings.txt', 'r') as file:
+        text = file.readlines()
+
+    for row in text:
+        if not row.startswith('#'):
+            if row != '\n':
+                row.replace('\n', '')
+                splitrow = row.replace('\n', '').split('=')
+                settings.update({splitrow[0]: splitrow[1]})
+
+
 def fetch_reads():
     """ The fetch_reads function fetches the reads from the bam file
 
@@ -121,24 +138,9 @@ def update_softclipdata(softclipdata, softclip_pos):
     return softclipdata
 
 
-def get_coverage(ref, pos):
-    """ The get_coverage function retrieves the number of aligned reads of a position.
-
-    :param ref: a string representing the chromosome.
-    :param pos: an integer representing the position of the reference genome.
-    :return coverage: an integer representing the coverage of the given position.
-    """
-    bamfile = pysam.AlignmentFile(args.bam, 'rb')
-    coverage = 0
-    for pileupcolumn in bamfile.pileup(ref, pos, pos + 1):
-        coverage = pileupcolumn.nsegments
-        break
-
-    return coverage
-
-
 def add_coverage(softclipdata, pileup):
-    """ The add coverage function adds the coverage to the softclipdata dictionary.
+    """ The add coverage function adds the coverage to the softclipdata dictionary or deletes or removes the
+    softclipdata if the coverage is below the minimum required coverage specified in the settings file.
 
     :param softclipdata: A dictionary with positions and the number of softclip bases.
     :param pileup: Pysam object containing read information of all positions in the region.
@@ -146,7 +148,11 @@ def add_coverage(softclipdata, pileup):
     """
     for pileupcolumn in pileup:
         if pileupcolumn.pos in softclipdata:
-            softclipdata[pileupcolumn.pos][1] = pileupcolumn.nsegments
+            coverage = pileupcolumn.nsegments + softclipdata[pileupcolumn.pos][0]
+            if coverage > int(settings['MinCoverage']):
+                softclipdata[pileupcolumn.pos][1] = coverage
+            else:
+                softclipdata.pop(pileupcolumn.pos)
 
     return softclipdata
 
@@ -210,6 +216,9 @@ def write_logfile(read_data):
 
 
 if __name__ == '__main__':
+
+    read_settings()  # Read the settings
+
     reads, pileup = fetch_reads()  # fetch reads and pileup engine
 
     softclipdata, read_data = get_softclipdata(reads)  # retreive number of softclips and read information

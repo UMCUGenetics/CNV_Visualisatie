@@ -11,21 +11,27 @@ parser.add_argument('--bam', '-b', required=True, type=str, help='Path to bam fi
 parser.add_argument('--region', '-r', required=True, type=str,
                     help='String specifying the region in format: "chr#:start-stop". use chr# for whole chromosome.')
 parser.add_argument('--output', '-o', required=False, type=str, help='Path to output folder.')
-parser.add_argument('--log', '-l', required=False, default=False, type=bool,
-                    help='Bool specifying if logfile should be made.')
-parser.add_argument('--threshold', '-t', required=False, default=0, type=int,
-                    help='int specifying the minimun amount of reads before a flag is made')
-parser.add_argument('--minpercentage', '-mp', required=False, default=0, type=float,
-                    help='float specifying thethreshold for the minimum percentage of total reads in region before '
-                         'flagged.')
-parser.add_argument('--high_insert_size', '-hi', required=False, default=-1, type=int,
-                    help='Length of insert size to be classified as high.')
-parser.add_argument('--ultra_high_insert_size', '-uhi', required=False, default=20000, type=int,
-                    help='Length of insert size to be classified as ultra high.')
 parser.add_argument('--name', '-n', required=False, default='output', type=str,
                     help='Name for the project. This is the name of the output file.')
 
 args = parser.parse_args()
+
+
+def read_settings():
+    """ The read_settings function reads the settings file and creates a global dictionary containing all the settings.
+    """
+    global settings
+    settings = {}
+
+    with open('../Settings.txt', 'r') as file:
+        text = file.readlines()
+
+    for row in text:
+        if not row.startswith('#'):
+            if row != '\n':
+                row.replace('\n', '')
+                splitrow = row.replace('\n', '').split('=')
+                settings.update({splitrow[0]: splitrow[1]})
 
 
 def fetch_reads():
@@ -127,10 +133,10 @@ def compute_insert_size_threshold():
             break
 
     insert_sizes = np.array(insert_sizes)
-    if args.high_insert_size == -1:
+    if int(settings['high_insert_size']) == -1:
         high_threshold = int(np.percentile(insert_sizes, 99.5))
     else:
-        high_threshold = args.high_insert_size
+        high_threshold = int(settings['high_insert_size'])
 
 
 def flag_sameorientation(read, flags, isbuildingflags, all_flags, chromosome, start):
@@ -153,7 +159,8 @@ def flag_sameorientation(read, flags, isbuildingflags, all_flags, chromosome, st
 
     elif isbuildingflags[0] and start > flags[0][2]:
         percentage = round(flags[0][3]['count'] / flags[0][3]['total'], 2)
-        if flags[0][3]['count'] > args.threshold and percentage > args.minpercentage:
+        if flags[0][3]['count'] > int(settings['MinReadCount_same_orientation']) and \
+                percentage > float(settings['MinPercentage_same_orientation']):
             all_flags.append(flags[0])
         flags[0] = [chromosome, None, None, {'type': 'same_orientation', 'count': 0, 'total': 0}]
         isbuildingflags[0] = False
@@ -184,7 +191,8 @@ def flag_high_isize(read, flags, isbuildingflags, all_flags, chromosome, start):
 
     elif isbuildingflags[1] and start > flags[1][2]:
         percentage = round(flags[1][3]['count'] / flags[1][3]['total'], 2)
-        if flags[1][3]['count'] > args.threshold and percentage > args.minpercentage:
+        if flags[1][3]['count'] > int(settings['MinReadCount_high_insert_size']) and \
+                percentage > float(settings['MinPercentage_high_insert_size']):
             all_flags.append(flags[1])
         flags[1] = [chromosome, None, None, {'type': 'high_insert_size', 'count': 0, 'total': 0, 'lengths': []}]
         isbuildingflags[1] = False
@@ -209,13 +217,14 @@ def flag_ultra_high_isize(read, flags, isbuildingflags, all_flags, chromosome, s
     """
     insert_size = abs(read.isize)
 
-    if insert_size > args.ultra_high_insert_size:
+    if insert_size > int(settings['ultra_high_insert_size']):
         flags, isbuildingflags = generate_flag(read, flags, isbuildingflags, 3)
         flags[3][3]['lengths'].append(insert_size)
 
     elif isbuildingflags[3] and start > flags[3][2]:
         percentage = round(flags[3][3]['count'] / flags[3][3]['total'], 2)
-        if flags[3][3]['count'] > args.threshold and percentage > args.minpercentage:
+        if flags[3][3]['count'] > int(settings['MinReadCount_ultra_high_insert_size']) and \
+                percentage > float(settings['MinPercentage_ultra_high_insert_size']):
             all_flags.append(flags[3])
         flags[3] = [chromosome, None, None, {'type': 'ultra_high_insert_size', 'count': 0, 'total': 0, 'lengths': []}]
         isbuildingflags[3] = False
@@ -243,7 +252,8 @@ def flag_unmapped_mate(read, flags, isbuildingflags, all_flags, chromosome, star
 
     elif isbuildingflags[2] and start > flags[2][2]:
         percentage = round(flags[2][3]['count'] / flags[2][3]['total'], 2)
-        if flags[2][3]['count'] > args.threshold and percentage > args.minpercentage:
+        if flags[2][3]['count'] > int(settings['MinReadCount_unmapped_mate']) and \
+                percentage > float(settings['MinPercentage_unmapped_mate']):
             all_flags.append(flags[2])
         flags[2] = [chromosome, None, None, {'type': 'unmapped_mate', 'count': 0, 'total': 0}]
         isbuildingflags[2] = False
@@ -271,7 +281,8 @@ def flag_interchromosomal_mate(read, flags, isbuildingflags, all_flags, chromoso
 
     elif isbuildingflags[4] and start > flags[4][2]:
         percentage = round(flags[4][3]['count'] / flags[4][3]['total'], 2)
-        if flags[4][3]['count'] > args.threshold and percentage > args.minpercentage:
+        if flags[4][3]['count'] > int(settings['MinReadCount_inter_chromosomal_pair']) and \
+                percentage > float(settings['MinPercentage_inter_chromosomal_pair']):
             all_flags.append(flags[4])
         flags[4] = [chromosome, None, None, {'type': 'inter_chromosomal_pair', 'count': 0, 'total': 0}]
         isbuildingflags[4] = False
@@ -299,7 +310,8 @@ def flag_facaway(read, flags, isbuildingflags, all_flags, chromosome, start):
 
     elif isbuildingflags[5] and start > flags[5][2]:
         percentage = round(flags[5][3]['count'] / flags[5][3]['total'], 2)
-        if flags[5][3]['count'] > args.threshold and percentage > args.minpercentage:
+        if flags[5][3]['count'] > int(settings['MinReadCount_face_away']) and \
+                percentage > float(settings['MinPercentage_face_away']):
             all_flags.append(flags[5])
         flags[5] = [chromosome, None, None, {'type': 'face_away', 'count': 0, 'total': 0}]
         isbuildingflags[5] = False
@@ -486,9 +498,20 @@ def write_logfile(read_data):
     text = f'Logfile created by: {current_path}/Flag_placer.py\nScript finished at: {current_time} {current_day}\n' \
            f'{"-"*40}Read data{"-"*40}\nTotal reads: {read_data[0]}\nUnmapped reads: {read_data[1]}\n' \
            f'Reads without matches: {read_data[2]}\n{"-"*40}Parameters{"-"*40}\nRegion: {args.region}\n' \
-           f'Bamfile: {args.bam}\nOutput_folder: {args.output}\nRead threshold: {args.threshold}\n' \
-           f'Insert size threshold: {high_threshold}\nUltra high insert size threshold: {args.ultra_high_insert_size}' \
-           f'\nMinimal percentage: {args.minpercentage}'
+           f'Bamfile: {args.bam}\nOutput_folder: {args.output}\n{"-"*40}Settings{"-"*40}\nhigh_insert_size=' \
+           f'{settings["high_insert_size"]}\nultra_high_insert_size={settings["ultra_high_insert_size"]}\n' \
+           f'MinPercentage_same_orientation={settings["MinPercentage_same_orientation"]}\nMinPercentage_high_insert_size=' \
+           f'{settings["MinPercentage_high_insert_size"]}\nMinPercentage_unmapped_mate=' \
+           f'{settings["MinPercentage_unmapped_mate"]}\nMinPercentage_ultra_high_insert_size=' \
+           f'{settings["MinPercentage_ultra_high_insert_size"]}\nMinPercentage_inter_chromosomal_pair=' \
+           f'{settings["MinPercentage_inter_chromosomal_pair"]}\nMinPercentage_face_away=' \
+           f'{settings["MinPercentage_face_away"]}\nMinReadCount_same_orientation=' \
+           f'{settings["MinReadCount_same_orientation"]}\nMinReadCount_high_insert_size=' \
+           f'{settings["MinReadCount_high_insert_size"]}\nMinReadCount_unmapped_mate=' \
+           f'{settings["MinReadCount_unmapped_mate"]}\nMinReadCount_ultra_high_insert_size=' \
+           f'{settings["MinReadCount_ultra_high_insert_size"]}\nMinReadCount_inter_chromosomal_pair=' \
+           f'{settings["MinReadCount_inter_chromosomal_pair"]}\nMinReadCount_face_away=' \
+           f'{settings["MinReadCount_face_away"]}'
 
     with open(args.output + f'/{args.name}_log.txt', 'w') as logfile:
         logfile.write(text)
@@ -496,6 +519,7 @@ def write_logfile(read_data):
 
 if __name__ == '__main__':
     """ The main calls the other functions in the right order."""
+    read_settings()  # Read the settings
 
     reads = fetch_reads()  # get all reads at the regions from the vcf call.
 
@@ -505,5 +529,5 @@ if __name__ == '__main__':
 
     write_bedfile(sorted_flags)  # write the result in a BED file.
 
-    if args.log:
+    if settings['log'] == 'True':
         write_logfile(read_data)  # write logfile with parameters
