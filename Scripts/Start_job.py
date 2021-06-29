@@ -51,7 +51,7 @@ def write_bedgraphfile(chromosome):
     :param chromosome: Int or Str specifying the chromosome.
     """
     if not os.path.exists(f"{args.output}/{args.name}_{chromosome}.BedGraph"):
-        os.system(f'python3 softclip_graph.py -b "{args.bam}"'
+        os.system(f'python3 Softclip_graph.py -b "{args.bam}"'
                   f' -o "{args.output}"'
                   f' -r "chr{chromosome}"'
                   f' -n "{args.name}_softclip_{chromosome}"')
@@ -171,6 +171,7 @@ def merge_logfiles(chromosomes):
 if __name__ == '__main__':
     start = time.time()  # Keep track of time.
     chromosomes = list(range(1, 23)) + ['X', 'Y']  # create a list of all chromosomes.
+    read_settings()
 
     bedfile_handle(chromosomes, 'flags')  # create bed files for each chromosome.
 
