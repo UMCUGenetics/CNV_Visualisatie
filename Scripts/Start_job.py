@@ -41,7 +41,7 @@ def write_bedfile(chromosome):
         os.system(f'python3 Flag_placer.py -b "{args.bam}"'
                   f' -o "{args.output}"'
                   f' -r "chr{chromosome}"'
-                  f' -n "{args.name}_flags_{chromosome}"')
+                  f' -n "{args.name}_{chromosome}"')
 
 
 def write_bedgraphfile(chromosome):
@@ -54,7 +54,7 @@ def write_bedgraphfile(chromosome):
         os.system(f'python3 Softclip_graph.py -b "{args.bam}"'
                   f' -o "{args.output}"'
                   f' -r "chr{chromosome}"'
-                  f' -n "{args.name}_softclip_{chromosome}"')
+                  f' -n "{args.name}_{chromosome}"')
 
 
 def merge_bedfiles(chromosomes, extension):
@@ -131,8 +131,8 @@ def get_log_data(chromosomes):
         total_unmapped += int(text[4].split(': ')[1])
         total_reads_without_matches += int(text[5].split(': ')[1])
 
-        os.remove(f"{args.output}/{args.name}_flags_{chromosome}_log.txt")
-        os.remove(f"{args.output}/{args.name}_softclip_{chromosome}_log.txt")
+        os.remove(f"{args.output}/{args.name}_{chromosome}_bed_log.txt")
+        os.remove(f"{args.output}/{args.name}_{chromosome}_BedGraph_log.txt")
 
         return total_reads, total_unmapped, total_reads_without_matches
 

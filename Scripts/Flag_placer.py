@@ -513,7 +513,7 @@ def write_logfile(read_data):
            f'{settings["MinReadCount_inter_chromosomal_pair"]}\nMinReadCount_face_away=' \
            f'{settings["MinReadCount_face_away"]}'
 
-    with open(args.output + f'/{args.name}_log.txt', 'w') as logfile:
+    with open(args.output + f'/{args.name}_bed_log.txt', 'w') as logfile:
         logfile.write(text)
 
 
