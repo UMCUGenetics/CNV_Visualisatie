@@ -32,7 +32,7 @@ def read_settings():
 
 
 def fetch_reads():
-    """ The fetch_reads function fetches the reads from the bam file
+    """ The fetch_reads function fetches the reads from the bam file.
 
     :return reads: Pysam object containing read information.
     :return pileup: Pysam object containing read information of all positions in the region.
@@ -189,7 +189,7 @@ def write_bedgraph_file(graphdata):
     :param heatmapdata: A 2d list containing the coordinates and the percentage of sofclipped bases.
     """
     with open(args.output + f'/{args.name}.BedGraph', 'w') as bedfile:
-        bedfile.write('track type=bedGraph name=Softclip_graph description="Softclip graph" color=220,20,60 '
+        bedfile.write('track type=bedGraph name="Softclip_graph" description="Softclip_graph" color=220,20,60 '
                       'graphType=bar alwaysZero=off autoScale=on\n')
 
     with open(args.output + f'/{args.name}.BedGraph', 'a') as bedfile:

@@ -45,7 +45,7 @@ def write_bedfile(chromosome):
 
 
 def write_bedgraphfile(chromosome):
-    """ The write_bedgraphfile function runs the softclipp_graph.py script for the given chromosome with the given
+    """ The write_bedgraphfile function runs the Softclipp_graph.py script for the given chromosome with the given
     arguments
 
     :param chromosome: Int or Str specifying the chromosome.
@@ -58,7 +58,8 @@ def write_bedgraphfile(chromosome):
 
 
 def merge_bedfiles(chromosomes, extension):
-    """ The merge_bedfiles function combines all the bedfiles or BedGraph files into one large file.
+    """ The merge_bedfiles function combines all the bedfiles or BedGraph files into one large bed file or BedGraph
+    file.
 
     :param chromosomes: Int or Str specifying the chromosome.
     :param extension: Str representing the file extension.
@@ -74,10 +75,10 @@ def merge_bedfiles(chromosomes, extension):
 
 
 def get_bed_text(chromosome, extension):
-    """ The update text function receives the already merged bedfile_text and adds the content of the next bedfile to
-    the total bedfile_text.
+    """ The get_bed_text function reads the text from the bed file or BedGraph file of the given chromosome and returns
+    the text of the bed file or BedGraph file. It also deletes the bedfile or BedGraph file after the text has been
+    read.
 
-    :param bedfile_text: a string containing the content of the merged bedfile
     :param chromosome: a string resembling a chromosome.
     :param extension: a string resembling the file extension.
     :return bedfile_text: a string containing the text of the bed file.
@@ -119,6 +120,14 @@ def bedfile_handle(chromosomes, extension):
 
 
 def get_log_data(chromosomes):
+    """ The get_log_data function reads all the log files and receives the total reads, total unmapped reads and total
+    reads without matches from each log file and calculates the sum.
+
+    :param chromosomes: A list of all chromosomes.
+    :return total_reads: An integer representing the total number of reads.
+    :return total_unmapped: An integer representing the total number of unmapped reads.
+    :return total_reads_without_matches: An integer representing the total number of reads without matches.
+    """
     total_reads = 0
     total_unmapped = 0
     total_reads_without_matches = 0
@@ -138,6 +147,10 @@ def get_log_data(chromosomes):
 
 
 def merge_logfiles(chromosomes):
+    """ The merge_logfiles function reads all the logfiles created and combines them in one large log file.
+
+    :chromosomes: A list of all chromosomes.
+    """
     total_reads, total_unmapped, total_reads_without_matches = get_log_data(chromosomes)
 
     current_path = os.getcwd()
@@ -171,7 +184,7 @@ def merge_logfiles(chromosomes):
 if __name__ == '__main__':
     start = time.time()  # Keep track of time.
     chromosomes = list(range(1, 23)) + ['X', 'Y']  # create a list of all chromosomes.
-    read_settings()
+    read_settings()  # read the settings file.
 
     bedfile_handle(chromosomes, 'flags')  # create bed files for each chromosome.
 

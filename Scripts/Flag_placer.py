@@ -469,7 +469,7 @@ def write_bedfile(flags):
 
 
 def sort_flags(flags):
-    """ The sort_flags function sorts the flags on starting position using insertionsort.
+    """ The sort_flags function sorts the flags on starting position using insertion sort.
 
     :param flags: a 2d list containing all the flag information.
     :return flags: a 2d list containing all the flag information.
