@@ -4,27 +4,34 @@ from statistics import mean, median
 import os
 import argparse
 import re
+import numpy as np
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--bam', '-b', required=True, type=str, help='Path to bam file.')
-parser.add_argument('--output', '-o', required=False, type=str, help='Path to output folder.')
-parser.add_argument('--log', '-l', required=False, default=False, type=bool,
-                    help='Bool specifying if logfile should be made.')
-parser.add_argument('--threshold', '-t', required=False, default=0, type=int,
-                    help='int specifying the minimun amount of reads before a flag is made')
-parser.add_argument('--minpercentage', '-mp', required=False, default=0, type=float,
-                    help='float specifying thethreshold for the minimum percentage of total reads in region before '
-                         'flagged.')
-parser.add_argument('--region', '-r', required=False, default='', type=str,
+parser.add_argument('--region', '-r', required=True, type=str,
                     help='String specifying the region in format: "chr#:start-stop". use chr# for whole chromosome.')
-parser.add_argument('--high_insert_size', '-hi', required=False, default=600, type=int,
-                    help='Length of insert size to be classified as high.')
-parser.add_argument('--ultra_high_insert_size', '-uhi', required=False, default=20000, type=int,
-                    help='Length of insert size to be classified as ultra high.')
+parser.add_argument('--output', '-o', required=False, type=str, help='Path to output folder.')
 parser.add_argument('--name', '-n', required=False, default='output', type=str,
                     help='Name for the project. This is the name of the output file.')
 
 args = parser.parse_args()
+
+
+def read_settings():
+    """ The read_settings function reads the settings file and creates a global dictionary containing all the settings.
+    """
+    global settings
+    settings = {}
+
+    with open('../Settings.txt', 'r') as file:
+        text = file.readlines()
+
+    for row in text:
+        if not row.startswith('#'):
+            if row != '\n':
+                row.replace('\n', '')
+                splitrow = row.replace('\n', '').split('=')
+                settings.update({splitrow[0]: splitrow[1]})
 
 
 def fetch_reads():
@@ -34,19 +41,15 @@ def fetch_reads():
     """
     bamfile = pysam.AlignmentFile(args.bam, 'rb')
 
-    if args.region == 'all':
-        reads = bamfile.fetch()
+    if ':' in args.region and '-' in args.region:
+        chromosome, start, end = re.split(':|-', args.region)
+        chromosome = chromosome.replace('chr', '')
+
+        reads = bamfile.fetch(chromosome, int(start), int(end))
 
     else:
-        if ':' in args.region and '-' in args.region:
-            chromosome, start, end = re.split(':|-', args.region)
-            chromosome = chromosome.replace('chr', '')
-
-            reads = bamfile.fetch(chromosome, int(start), int(end))
-
-        else:
-            chromosome = args.region.replace('chr', '')
-            reads = bamfile.fetch(chromosome)
+        chromosome = args.region.replace('chr', '')
+        reads = bamfile.fetch(chromosome)
 
     return reads
 
@@ -62,11 +65,15 @@ def place_flags(reads):
     all_flags = []
     read_data = [0, 0, 0]  # [0] is number of reads. [1] is unmapped reads. [2] is reads with 0 mapped positions
 
-    isbuildingflags = [False, False, False, False]
+    isbuildingflags = [False, False, False, False, False, False]
     flags = [[None, None, None, {'type': 'same_orientation', 'count': 0, 'total': 0}],
              [None, None, None, {'type': 'high_insert_size', 'count': 0, 'total': 0, 'lengths': []}],
              [None, None, None, {'type': 'unmapped_mate', 'count': 0, 'total': 0}],
-             [None, None, None, {'type': 'ultra_high_insert_size', 'count': 0, 'total': 0, 'lengths': []}]]
+             [None, None, None, {'type': 'ultra_high_insert_size', 'count': 0, 'total': 0, 'lengths': []}],
+             [None, None, None, {'type': 'inter_chromosomal_pair', 'count': 0, 'total': 0}],
+             [None, None, None, {'type': 'face_away', 'count': 0, 'total': 0}]]
+
+    compute_insert_size_threshold()
 
     for read in reads:
         if not read.is_unmapped and read.positions:
@@ -87,6 +94,14 @@ def place_flags(reads):
             flags, isbuildingflags, all_flags = flag_ultra_high_isize(read, flags, isbuildingflags, all_flags,
                                                                       chromosome,  start)
 
+            # place flag if the mate of the read is mapped to a different chromosome.
+            flags, isbuildingflags, all_flags = flag_interchromosomal_mate(read, flags, isbuildingflags, all_flags,
+                                                                     chromosome, start)
+
+            # place flag if the read and its mate face away from each other
+            flags, isbuildingflags, all_flags = flag_facaway(read, flags, isbuildingflags, all_flags,
+                                                                           chromosome, start)
+
             flags = update_total(flags, isbuildingflags)
 
         elif read.is_unmapped:
@@ -96,6 +111,32 @@ def place_flags(reads):
         read_data[0] += 1
 
     return all_flags, read_data
+
+
+def compute_insert_size_threshold():
+    """ The compute_insert_size_threshold computes the threshold of the high_insert_size flag if the user specified it.
+    """
+    bamfile = pysam.AlignmentFile(args.bam, 'rb')
+    reads = bamfile.fetch()
+
+    insert_sizes = []
+    max_reads = 10000
+
+    global high_threshold
+    global ultra_high_threshold
+
+    for read in reads:
+        if read.is_proper_pair:
+            insert_sizes.append(abs(read.isize))
+
+        if len(insert_sizes) == max_reads:
+            break
+
+    insert_sizes = np.array(insert_sizes)
+    if int(settings['high_insert_size']) == -1:
+        high_threshold = int(np.percentile(insert_sizes, 99.5))
+    else:
+        high_threshold = int(settings['high_insert_size'])
 
 
 def flag_sameorientation(read, flags, isbuildingflags, all_flags, chromosome, start):
@@ -118,7 +159,8 @@ def flag_sameorientation(read, flags, isbuildingflags, all_flags, chromosome, st
 
     elif isbuildingflags[0] and start > flags[0][2]:
         percentage = round(flags[0][3]['count'] / flags[0][3]['total'], 2)
-        if flags[0][3]['count'] > args.threshold and percentage > args.minpercentage:
+        if flags[0][3]['count'] > int(settings['MinReadCount_same_orientation']) and \
+                percentage > float(settings['MinPercentage_same_orientation']):
             all_flags.append(flags[0])
         flags[0] = [chromosome, None, None, {'type': 'same_orientation', 'count': 0, 'total': 0}]
         isbuildingflags[0] = False
@@ -143,13 +185,14 @@ def flag_high_isize(read, flags, isbuildingflags, all_flags, chromosome, start):
     """
     insert_size = abs(read.isize)
 
-    if args.high_insert_size < insert_size < args.ultra_high_insert_size:
+    if high_threshold < insert_size:
         flags, isbuildingflags = generate_flag(read, flags, isbuildingflags, 1)
         flags[1][3]['lengths'].append(insert_size)
 
     elif isbuildingflags[1] and start > flags[1][2]:
         percentage = round(flags[1][3]['count'] / flags[1][3]['total'], 2)
-        if flags[1][3]['count'] > args.threshold and percentage > args.minpercentage:
+        if flags[1][3]['count'] > int(settings['MinReadCount_high_insert_size']) and \
+                percentage > float(settings['MinPercentage_high_insert_size']):
             all_flags.append(flags[1])
         flags[1] = [chromosome, None, None, {'type': 'high_insert_size', 'count': 0, 'total': 0, 'lengths': []}]
         isbuildingflags[1] = False
@@ -174,13 +217,14 @@ def flag_ultra_high_isize(read, flags, isbuildingflags, all_flags, chromosome, s
     """
     insert_size = abs(read.isize)
 
-    if insert_size > args.ultra_high_insert_size:
+    if insert_size > int(settings['ultra_high_insert_size']):
         flags, isbuildingflags = generate_flag(read, flags, isbuildingflags, 3)
         flags[3][3]['lengths'].append(insert_size)
 
     elif isbuildingflags[3] and start > flags[3][2]:
         percentage = round(flags[3][3]['count'] / flags[3][3]['total'], 2)
-        if flags[3][3]['count'] > args.threshold and percentage > args.minpercentage:
+        if flags[3][3]['count'] > int(settings['MinReadCount_ultra_high_insert_size']) and \
+                percentage > float(settings['MinPercentage_ultra_high_insert_size']):
             all_flags.append(flags[3])
         flags[3] = [chromosome, None, None, {'type': 'ultra_high_insert_size', 'count': 0, 'total': 0, 'lengths': []}]
         isbuildingflags[3] = False
@@ -208,10 +252,69 @@ def flag_unmapped_mate(read, flags, isbuildingflags, all_flags, chromosome, star
 
     elif isbuildingflags[2] and start > flags[2][2]:
         percentage = round(flags[2][3]['count'] / flags[2][3]['total'], 2)
-        if flags[2][3]['count'] > args.threshold and percentage > args.minpercentage:
+        if flags[2][3]['count'] > int(settings['MinReadCount_unmapped_mate']) and \
+                percentage > float(settings['MinPercentage_unmapped_mate']):
             all_flags.append(flags[2])
         flags[2] = [chromosome, None, None, {'type': 'unmapped_mate', 'count': 0, 'total': 0}]
         isbuildingflags[2] = False
+
+    return flags, isbuildingflags, all_flags
+
+
+def flag_interchromosomal_mate(read, flags, isbuildingflags, all_flags, chromosome, start):
+    """ The flag_interchromosomal_mate function checks if the current read should be added to a inter_chromosomal_mate
+     flag or start creating a inter_chromosomal flag.
+
+    :param read: pysam object containing data of a read.
+    :param flags: a 2d list containing all the flag information.
+    :param isbuildingflags: a list indicating which flags are currently being built.
+    :param all_flags: A 2d list containing the coordinates of the flags and additional information.
+    :param chromosome: The chromosome where the read is mapped.
+    :param start: Integer indicating the starting position of the read.
+
+    :return flags: a 2d list containing all the flag information.
+    :return isbuildingflags: a list indicating which flags are currently being built.
+    :return all_flags: A 2d list containing the coordinates of the flags and additional information.
+    """
+    if read.reference_name != read.next_reference_name:
+        flags, isbuildingflags = generate_flag(read, flags, isbuildingflags, 4)
+
+    elif isbuildingflags[4] and start > flags[4][2]:
+        percentage = round(flags[4][3]['count'] / flags[4][3]['total'], 2)
+        if flags[4][3]['count'] > int(settings['MinReadCount_inter_chromosomal_pair']) and \
+                percentage > float(settings['MinPercentage_inter_chromosomal_pair']):
+            all_flags.append(flags[4])
+        flags[4] = [chromosome, None, None, {'type': 'inter_chromosomal_pair', 'count': 0, 'total': 0}]
+        isbuildingflags[4] = False
+
+    return flags, isbuildingflags, all_flags
+
+
+def flag_facaway(read, flags, isbuildingflags, all_flags, chromosome, start):
+    """ The flag_facaway function checks if the current read should be added to a face_away flag or start creating a
+    face_away flag.
+
+    :param read: pysam object containing data of a read.
+    :param flags: a 2d list containing all the flag information.
+    :param isbuildingflags: a list indicating which flags are currently being built.
+    :param all_flags: A 2d list containing the coordinates of the flags and additional information.
+    :param chromosome: The chromosome where the read is mapped.
+    :param start: Integer indicating the starting position of the read.
+
+    :return flags: a 2d list containing all the flag information.
+    :return isbuildingflags: a list indicating which flags are currently being built.
+    :return all_flags: A 2d list containing the coordinates of the flags and additional information.
+    """
+    if is_facaway(read):
+        flags, isbuildingflags = generate_flag(read, flags, isbuildingflags, 5)
+
+    elif isbuildingflags[5] and start > flags[5][2]:
+        percentage = round(flags[5][3]['count'] / flags[5][3]['total'], 2)
+        if flags[5][3]['count'] > int(settings['MinReadCount_face_away']) and \
+                percentage > float(settings['MinPercentage_face_away']):
+            all_flags.append(flags[5])
+        flags[5] = [chromosome, None, None, {'type': 'face_away', 'count': 0, 'total': 0}]
+        isbuildingflags[5] = False
 
     return flags, isbuildingflags, all_flags
 
@@ -304,6 +407,24 @@ def issameorientation(read):
     return False
 
 
+def is_facaway(read):
+    """ The is_facaway function receives a read and returns true if the read and its paired mate face away from each
+    other.
+
+    :param read: Pysam object containing data of a read.
+    :return bool: A boolean returning True if the read and its mate face away from each other.
+    """
+    if not issameorientation(read):
+        if not read.is_reverse:
+            if read.template_length < 0:
+                return True
+        else:
+            if read.template_length > 0:
+                return True
+
+    return False
+
+
 def write_bedfile(flags):
     """ The write_bedfile function writes a file in BED format that can be loaded in igv and visualises the read data.
 
@@ -328,6 +449,7 @@ def write_bedfile(flags):
             rgb = f"0,192,199"
 
         elif flag[3]['type'] == 'high_insert_size':
+            description += f";Threshold={high_threshold}bp"
             rgb = f"232,135,26"
 
         elif flag[3]['type'] == 'unmapped_mate':
@@ -336,12 +458,18 @@ def write_bedfile(flags):
         elif flag[3]['type'] == 'ultra_high_insert_size':
             rgb = '71,226,111'
 
+        elif flag[3]['type'] == 'inter_chromosomal_pair':
+            rgb = '87,61,219'
+
+        elif flag[3]['type'] == 'face_away':
+            rgb = '147,133,255'
+
         with open(args.output + f'/{args.name}.bed', 'a') as bedfile:
             bedfile.write(f"{region}\t{description}\t0\t.\t{flag[1]}\t{flag[2]}\t{rgb}\n")
 
 
 def sort_flags(flags):
-    """ The sort_flags function sorts the flags on starting position using insertionsort.
+    """ The sort_flags function sorts the flags on starting position using insertion sort.
 
     :param flags: a 2d list containing all the flag information.
     :return flags: a 2d list containing all the flag information.
@@ -370,15 +498,28 @@ def write_logfile(read_data):
     text = f'Logfile created by: {current_path}/Flag_placer.py\nScript finished at: {current_time} {current_day}\n' \
            f'{"-"*40}Read data{"-"*40}\nTotal reads: {read_data[0]}\nUnmapped reads: {read_data[1]}\n' \
            f'Reads without matches: {read_data[2]}\n{"-"*40}Parameters{"-"*40}\nRegion: {args.region}\n' \
-           f'Bamfile: {args.bam}\nOutput_folder: {args.output}\nRead threshold: {args.threshold}\n' \
-           f'Insert size threshold: {args.high_insert_size}\nMinimal percentage: {args.minpercentage}'
+           f'Bamfile: {args.bam}\nOutput_folder: {args.output}\n{"-"*40}Settings{"-"*40}\nhigh_insert_size=' \
+           f'{settings["high_insert_size"]}\nultra_high_insert_size={settings["ultra_high_insert_size"]}\n' \
+           f'MinPercentage_same_orientation={settings["MinPercentage_same_orientation"]}\nMinPercentage_high_insert_size=' \
+           f'{settings["MinPercentage_high_insert_size"]}\nMinPercentage_unmapped_mate=' \
+           f'{settings["MinPercentage_unmapped_mate"]}\nMinPercentage_ultra_high_insert_size=' \
+           f'{settings["MinPercentage_ultra_high_insert_size"]}\nMinPercentage_inter_chromosomal_pair=' \
+           f'{settings["MinPercentage_inter_chromosomal_pair"]}\nMinPercentage_face_away=' \
+           f'{settings["MinPercentage_face_away"]}\nMinReadCount_same_orientation=' \
+           f'{settings["MinReadCount_same_orientation"]}\nMinReadCount_high_insert_size=' \
+           f'{settings["MinReadCount_high_insert_size"]}\nMinReadCount_unmapped_mate=' \
+           f'{settings["MinReadCount_unmapped_mate"]}\nMinReadCount_ultra_high_insert_size=' \
+           f'{settings["MinReadCount_ultra_high_insert_size"]}\nMinReadCount_inter_chromosomal_pair=' \
+           f'{settings["MinReadCount_inter_chromosomal_pair"]}\nMinReadCount_face_away=' \
+           f'{settings["MinReadCount_face_away"]}'
 
-    with open(args.output + f'/{args.name}_log.txt', 'w') as logfile:
+    with open(args.output + f'/{args.name}_bed_log.txt', 'w') as logfile:
         logfile.write(text)
 
 
 if __name__ == '__main__':
     """ The main calls the other functions in the right order."""
+    read_settings()  # Read the settings
 
     reads = fetch_reads()  # get all reads at the regions from the vcf call.
 
@@ -388,5 +529,5 @@ if __name__ == '__main__':
 
     write_bedfile(sorted_flags)  # write the result in a BED file.
 
-    if args.log:
+    if settings['log'] == 'True':
         write_logfile(read_data)  # write logfile with parameters

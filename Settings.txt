@@ -1,0 +1,26 @@
+# Settings CNV visualisation
+# WARNING: do not change the names left of the "=" sign.
+# WARNING: do not modify this file while the program is running.
+# WARNING: do not change the relative path of this file to the Scripts.
+
+# Parameters:
+log=True
+high_insert_size=-1
+ultra_high_insert_size=20000
+
+# Flag parameters:
+MinPercentage_same_orientation=0
+MinPercentage_high_insert_size=0
+MinPercentage_unmapped_mate=0
+MinPercentage_ultra_high_insert_size=0
+MinPercentage_inter_chromosomal_pair=0
+MinPercentage_face_away=0
+MinReadCount_same_orientation=0
+MinReadCount_high_insert_size=0
+MinReadCount_unmapped_mate=0
+MinReadCount_ultra_high_insert_size=0
+MinReadCount_inter_chromosomal_pair=0
+MinReadCount_face_away=0
+
+# Softclip parameters
+MinCoverage=0
