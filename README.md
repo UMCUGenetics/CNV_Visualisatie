@@ -1,8 +1,8 @@
-# CNV_Visualisation
+# CoNVident
 
 ## Description
 
-The CNV_visualisation project is a project about visually detecting and analyzing CNV calls. It contains multiple python
+The CoNVident project is a project about visually detecting and analyzing CNV calls. It contains multiple python
 scripts that retrieve additional information from bam files. The CNV_vis.py script creates a BED formatted file that can
 be loaded in IGV and gives a summary of the read information around CNV calls made in a vcf file. The flag_placer.py is
 a script creates a BED formatted file that highlights potential regions of interest in CNV calling. The softclip_graph.py
